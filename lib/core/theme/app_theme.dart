@@ -4,17 +4,16 @@ import 'app_colors.dart';
 abstract final class AppTheme {
   static const double _fullCorner = 9999;
   static const double _chipCorner = 8;
-  static const double _cardCorner = 12;
+  static const double _cardCorner = 8;
   static const double _fabCorner = 16;
   static const double _dialogCorner = 28;
   static const double _snackCorner = 4;
   static const double _listTileCorner = 4;
   static const double _tooltipCorner = 8;
-  static const double _inputCorner = 8;
+  static const double _inputCorner = 5;
   static const double _appBarScrolledElevation = 3;
   static const double _fabElevation = 3;
   static const double _navBarElevation = 3;
-  static const double _primaryTonal08 = 0.08;
   static const double _primaryTonal12 = 0.12;
   static const double _primaryTonal50 = 0.5;
 
@@ -46,6 +45,7 @@ abstract final class AppTheme {
       sliderTheme: _sliderTheme,
       progressIndicatorTheme: _progressIndicatorTheme,
       tooltipTheme: _tooltipTheme,
+      tabBarTheme: _tabBarTheme,
     );
   }
 
@@ -97,7 +97,7 @@ abstract final class AppTheme {
       scrolledUnderElevation: _appBarScrolledElevation,
       backgroundColor: AppColors.surface,
       foregroundColor: AppColors.onSurface,
-      surfaceTintColor: AppColors.primary.withValues(alpha: _primaryTonal08),
+      surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
     );
   }
@@ -217,7 +217,10 @@ abstract final class AppTheme {
     );
   }
 
-  static OutlineInputBorder _outlineInputBorder(Color color, {double width = 1}) {
+  static OutlineInputBorder _outlineInputBorder(
+    Color color, {
+    double width = 1,
+  }) {
     return OutlineInputBorder(
       borderRadius: BorderRadius.circular(_inputCorner),
       borderSide: BorderSide(color: color, width: width),
@@ -257,7 +260,9 @@ abstract final class AppTheme {
     return BottomSheetThemeData(
       backgroundColor: AppColors.surfaceContainerLow,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(_dialogCorner)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(_dialogCorner),
+        ),
       ),
     );
   }
@@ -352,6 +357,16 @@ abstract final class AppTheme {
       textStyle: _textTheme.bodySmall?.copyWith(
         color: AppColors.inverseOnSurface,
       ),
+    );
+  }
+
+  static TabBarThemeData get _tabBarTheme {
+    return TabBarThemeData(
+      dividerColor: AppColors.outline,
+      indicatorColor: AppColors.primary,
+      labelColor: AppColors.primary,
+      unselectedLabelColor: AppColors.onSurfaceVariant,
+      overlayColor: WidgetStateProperty.all(Colors.transparent),
     );
   }
 }
