@@ -3,33 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/unesco_site_dto.dart';
-
-class UnescoSitesNetworkException implements Exception {
-  const UnescoSitesNetworkException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => 'UnescoSitesNetworkException: $message';
-}
-
-class UnescoSitesParseException implements Exception {
-  const UnescoSitesParseException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => 'UnescoSitesParseException: $message';
-}
-
-class UnescoSitesEmptyResultException implements Exception {
-  const UnescoSitesEmptyResultException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => 'UnescoSitesEmptyResultException: $message';
-}
+import 'unesco_api_exceptions.dart';
 
 class UnescoSitesService {
   UnescoSitesService({http.Client? client}) : _client = client ?? http.Client();

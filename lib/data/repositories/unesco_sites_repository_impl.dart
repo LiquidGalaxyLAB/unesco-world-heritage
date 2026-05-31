@@ -1,6 +1,7 @@
 import '../../domain/models/heritage_site.dart';
 import '../../domain/repositories/unesco_sites_repository.dart';
 import '../models/unesco_site_dto.dart';
+import '../services/unesco_api_exceptions.dart';
 import '../services/unesco_sites_service.dart';
 
 class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
