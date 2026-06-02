@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../settings/view_models/settings_view_model.dart';
 
@@ -16,6 +17,31 @@ class _AuthViewState extends State<AuthView> {
   final _googleMapKeyController = TextEditingController();
   bool _obscureGemini = true;
   bool _obscureGoogleMap = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKeys();
+  }
+
+  Future<void> _loadKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _geminiKeyController.text = prefs.getString('gemini_api_key') ?? '';
+      _googleMapKeyController.text = prefs.getString('google_map_api_key') ?? '';
+    });
+  }
+
+  Future<void> _saveKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('gemini_api_key', _geminiKeyController.text.trim());
+    await prefs.setString('google_map_api_key', _googleMapKeyController.text.trim());
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('API Keys saved successfully!')),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -160,12 +186,7 @@ class _AuthViewState extends State<AuthView> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    // Update action
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('API Keys updated successfully!')),
-                    );
-                  },
+                  onPressed: _saveKeys,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.surfaceContainerHighest,
                     foregroundColor: AppColors.onSurface,
