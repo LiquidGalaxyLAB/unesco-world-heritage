@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../domain/models/lg_connection_settings.dart';
+import '../../auth/views/auth_view.dart';
+import '../../search/views/search_view.dart';
 import '../settings_dependencies.dart';
 import '../view_models/settings_view_model.dart';
 import 'widgets/about_components.dart';
@@ -19,7 +21,7 @@ class MainNavigationShell extends StatefulWidget {
 class _MainNavigationShellState extends State<MainNavigationShell>
     with SingleTickerProviderStateMixin {
   int _currentIndex =
-      2; // Default to Settings tab to showcase our implementation
+      3; // Default to Settings tab to showcase our implementation
   late final SettingsViewModel _settingsViewModel;
   late final AnimationController _fadeController;
 
@@ -57,8 +59,10 @@ class _MainNavigationShellState extends State<MainNavigationShell>
       case 0:
         return const _HomeTabPlaceholder();
       case 1:
-        return const _MapTabPlaceholder();
+        return SearchView(viewModel: _settingsViewModel);
       case 2:
+        return AuthView(viewModel: _settingsViewModel);
+      case 3:
       default:
         return SettingsView(viewModel: _settingsViewModel);
     }
@@ -67,29 +71,56 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: FadeTransition(opacity: _fadeController, child: _buildBody()),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _onTabSelected,
-        backgroundColor: AppColors.surfaceContainer,
-        elevation: 3,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24.0, 0, 24.0, 16.0),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(32.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(32.0),
+              child: NavigationBar(
+                selectedIndex: _currentIndex,
+                onDestinationSelected: _onTabSelected,
+                backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.95),
+                elevation: 0,
+                height: 72,
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home_rounded),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.search),
+                    selectedIcon: Icon(Icons.search_rounded),
+                    label: 'Search',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.vpn_key_outlined),
+                    selectedIcon: Icon(Icons.vpn_key_rounded),
+                    label: 'Auth',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings_rounded),
+                    label: 'Settings',
+                  ),
+                ],
+              ),
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore_rounded),
-            label: 'Explore',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: 'Settings',
-          ),
-        ],
+        ),
       ),
     );
   }
