@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../settings/view_models/settings_view_model.dart';
+import '../../settings/views/widgets/lg_connection_header.dart';
 
 class AuthView extends StatefulWidget {
   final SettingsViewModel viewModel;
@@ -65,36 +66,13 @@ class _AuthViewState extends State<AuthView> {
             children: [
               Text(
                 'API Authentication',
-                style: theme.textTheme.headlineSmall?.copyWith(
+                style: theme.textTheme.headlineMedium?.copyWith(
                   color: AppColors.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 16),
-              ListenableBuilder(
-                listenable: widget.viewModel,
-                builder: (context, _) {
-                  final isConnected = widget.viewModel.state.isConnected;
-                  final color = isConnected ? AppColors.secondary : AppColors.error;
-                  return Row(
-                    children: [
-                      Icon(
-                        Icons.public_rounded,
-                        color: color,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        isConnected ? 'LG CONNECTED' : 'LG DISCONNECTED',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: color,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+              const SizedBox(height: 12),
+              LgConnectionHeader(viewModel: widget.viewModel),
               const SizedBox(height: 60),
               
               // Gemini API Key Section
