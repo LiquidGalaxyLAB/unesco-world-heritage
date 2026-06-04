@@ -25,7 +25,7 @@ class CommandTab extends StatelessWidget {
       opacity: isEnabled ? 1 : 0.72,
       child: SizedBox(
         width: double.infinity,
-        height: 84,
+        height: 56,
         child: FilledButton(
           onPressed: isEnabled ? onPressed : null,
           style: FilledButton.styleFrom(
@@ -35,13 +35,13 @@ class CommandTab extends StatelessWidget {
             disabledForegroundColor: AppColors.onSurfaceVariant,
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(42),
+              borderRadius: BorderRadius.circular(28),
               side: const BorderSide(color: AppColors.outlineVariant),
             ),
           ),
           child: Text(
             title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: AppColors.onSurfaceVariant,
               fontWeight: FontWeight.w500,
             ),

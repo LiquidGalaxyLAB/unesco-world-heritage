@@ -3,11 +3,13 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../domain/models/lg_connection_settings.dart';
 import '../../auth/views/auth_view.dart';
 import '../../search/views/search_view.dart';
+import '../../about/views/about_view.dart';
 import '../settings_dependencies.dart';
 import '../view_models/settings_view_model.dart';
 import 'widgets/about_components.dart';
 import 'widgets/command_tab.dart';
 import 'widgets/lg_action_buttons.dart';
+import 'widgets/lg_connection_header.dart';
 import 'widgets/lg_error_card.dart';
 import 'widgets/lg_text_field.dart';
 
@@ -63,8 +65,10 @@ class _MainNavigationShellState extends State<MainNavigationShell>
       case 2:
         return AuthView(viewModel: _settingsViewModel);
       case 3:
-      default:
         return SettingsView(viewModel: _settingsViewModel);
+      case 4:
+      default:
+        return AboutView(viewModel: _settingsViewModel);
     }
   }
 
@@ -95,6 +99,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                 backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.95),
                 elevation: 0,
                 height: 72,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
                 destinations: const [
                   NavigationDestination(
                     icon: Icon(Icons.home_outlined),
@@ -115,6 +120,11 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                     icon: Icon(Icons.settings_outlined),
                     selectedIcon: Icon(Icons.settings_rounded),
                     label: 'Settings',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.info_outline_rounded),
+                    selectedIcon: Icon(Icons.info_rounded),
+                    label: 'About',
                   ),
                 ],
               ),
@@ -152,10 +162,10 @@ class SettingsView extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _LgConnectionHeader(viewModel: viewModel),
+                child: LgConnectionHeader(viewModel: viewModel),
               ),
               const SizedBox(height: 26),
               TabBar(
@@ -164,10 +174,10 @@ class SettingsView extends StatelessWidget {
                 labelPadding: EdgeInsets.zero,
                 labelStyle: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 unselectedLabelStyle: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 tabs: const [
                   Tab(text: 'LG Connection'),
                   Tab(text: 'LG Commands'),
@@ -189,38 +199,6 @@ class SettingsView extends StatelessWidget {
   }
 }
 
-class _LgConnectionHeader extends StatelessWidget {
-  const _LgConnectionHeader({required this.viewModel});
-
-  final SettingsViewModel viewModel;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: viewModel,
-      builder: (context, _) {
-        final isConnected = viewModel.state.isConnected;
-        final color = isConnected
-            ? AppColors.secondary
-            : AppColors.lgDisconnected;
-
-        return Row(
-          children: [
-            Icon(Icons.public_rounded, color: color, size: 24),
-            const SizedBox(width: 12),
-            Text(
-              isConnected ? 'LG CONNECTED' : 'LG DISCONNECTED',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
 
 class ConnectionTab extends StatefulWidget {
   const ConnectionTab({super.key, required this.viewModel});
