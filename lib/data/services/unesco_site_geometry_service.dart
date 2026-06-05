@@ -16,51 +16,55 @@ enum UnescoGeometryLayer {
 
 class UnescoSiteGeometryService {
   UnescoSiteGeometryService({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   static const String _serviceBaseUrl =
       'https://services6.arcgis.com/eMd5K6XXEvJETxfQ/ArcGIS/rest/services/prd_whc_sites_dossiers_elements_v2_view/FeatureServer';
+  static const String _wdpaNaturalSitesEndpoint =
+      'https://services5.arcgis.com/Mj0hjvkNtV7NRhA7/ArcGIS/rest/services/WDPA_v0/FeatureServer/1/query';
 
   final http.Client _client;
 
-  Future<UnescoSiteGeometryDto> fetchBoundaryById(int propertyId) async {
-    final geometries = await _fetchGeometries(
+  Future<List<UnescoSiteGeometryDto>> fetchBoundaryById(int propertyId) {
+    return _fetchGeometries(
       propertyId: propertyId,
       layer: UnescoGeometryLayer.boundary,
     );
-    if (geometries.isEmpty) {
-      throw UnescoSitesEmptyResultException(
-        'UNESCO boundary $propertyId was not found.',
-      );
-    }
-
-    return geometries.first;
   }
 
-  Future<UnescoSiteGeometryDto?> fetchBufferById(int propertyId) async {
-    final geometries = await _fetchGeometries(
+  Future<List<UnescoSiteGeometryDto>> fetchBufferById(int propertyId) {
+    return _fetchGeometries(
       propertyId: propertyId,
       layer: UnescoGeometryLayer.buffer,
     );
-    if (geometries.isEmpty) {
-      return null;
+  }
+
+  Future<List<UnescoSiteGeometryDto>> fetchWdpaNaturalSiteGeometries({
+    required String siteName,
+    required String isoCodes,
+  }) async {
+    final normalizedName = siteName.trim();
+    if (normalizedName.isEmpty) {
+      return const <UnescoSiteGeometryDto>[];
     }
 
-    return geometries.first;
+    final json = await _getJson(
+      _buildWdpaUri(siteName: normalizedName, isoCodes: isoCodes),
+    );
+    return _parseFeatures(json);
   }
 
   Future<List<UnescoSiteGeometryDto>> _fetchGeometries({
     required int propertyId,
     required UnescoGeometryLayer layer,
   }) async {
-    final json = await _getJson(_buildUri(propertyId: propertyId, layer: layer));
+    final json = await _getJson(
+      _buildUri(propertyId: propertyId, layer: layer),
+    );
     return _parseFeatures(json);
   }
 
-  Uri _buildUri({
-    required int propertyId,
-    required UnescoGeometryLayer layer,
-  }) {
+  Uri _buildUri({required int propertyId, required UnescoGeometryLayer layer}) {
     return Uri.parse('$_serviceBaseUrl/${layer.layerId}/query').replace(
       queryParameters: <String, String>{
         'f': 'json',
@@ -68,10 +72,82 @@ class UnescoSiteGeometryService {
         'outFields': 'property_id',
         'outSR': '4326',
         'returnGeometry': 'true',
-        'resultRecordCount': '1',
+        'resultRecordCount': '2000',
       },
     );
   }
+
+  Uri _buildWdpaUri({required String siteName, required String isoCodes}) {
+    final nameTokens = _buildSearchTokens(siteName);
+    final nameWhere = nameTokens
+        .map(
+          (token) =>
+              "(UPPER(name_eng) LIKE '%${_escapeSql(token.toUpperCase())}%' "
+              "OR UPPER(name) LIKE '%${_escapeSql(token.toUpperCase())}%')",
+        )
+        .join(' AND ');
+    final isoWhere = _buildIsoWhere(isoCodes);
+    final where = <String>[
+      "(UPPER(desig_eng) LIKE '%WORLD HERITAGE%')",
+      if (nameWhere.isNotEmpty) nameWhere,
+      if (isoWhere.isNotEmpty) isoWhere,
+    ].join(' AND ');
+
+    return Uri.parse(_wdpaNaturalSitesEndpoint).replace(
+      queryParameters: <String, String>{
+        'f': 'json',
+        'where': where,
+        'outFields': 'site_id,name_eng,name,desig_eng,iso3',
+        'outSR': '4326',
+        'returnGeometry': 'true',
+        'resultRecordCount': '2000',
+      },
+    );
+  }
+
+  List<String> _buildSearchTokens(String siteName) {
+    final words = siteName
+        .replaceAll(RegExp(r'[^A-Za-z0-9 -]'), ' ')
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim())
+        .where((word) => word.length >= 4)
+        .where(
+          (word) => !const <String>{
+            'the',
+            'and',
+            'site',
+            'heritage',
+            'world',
+            'national',
+            'park',
+          }.contains(word.toLowerCase()),
+        )
+        .toList(growable: false);
+
+    if (words.isEmpty) {
+      return <String>[siteName];
+    }
+
+    return words.take(3).toList(growable: false);
+  }
+
+  String _buildIsoWhere(String isoCodes) {
+    final codes = isoCodes
+        .split(RegExp(r'[,; ]+'))
+        .map((code) => code.trim().toUpperCase())
+        .where((code) => code.length >= 2)
+        .toList(growable: false);
+    if (codes.isEmpty) {
+      return '';
+    }
+
+    final clauses = codes
+        .map((code) => "UPPER(iso3) LIKE '%${_escapeSql(code)}%'")
+        .join(' OR ');
+    return '($clauses)';
+  }
+
+  String _escapeSql(String value) => value.replaceAll("'", "''");
 
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
     http.Response response;

@@ -103,13 +103,18 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
       rawCategory: dto.rawCategory,
       latitude: dto.latitude,
       longitude: dto.longitude,
+      isoCodes: dto.isoCodes,
+      description: dto.description,
+      dateInscribed: dto.dateInscribed,
+      mainImageUrl: dto.mainImageUrl,
+      imageUrls: dto.imageUrls,
     );
   }
 
   int _compareByNameThenId(HeritageSite left, HeritageSite right) {
     final nameComparison = left.name.toLowerCase().compareTo(
-          right.name.toLowerCase(),
-        );
+      right.name.toLowerCase(),
+    );
     if (nameComparison != 0) {
       return nameComparison;
     }

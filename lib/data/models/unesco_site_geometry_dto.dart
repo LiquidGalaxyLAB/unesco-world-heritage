@@ -8,8 +8,10 @@ class UnescoSiteGeometryDto {
     final attributes = _asMap(feature['attributes']);
     final geometry = _asMap(feature['geometry']);
 
-    final propertyId = _readInt(attributes['property_id']);
-    if (propertyId == null) {
+    final propertyId = _readInt(attributes['property_id']) ??
+        _readInt(attributes['site_id']) ??
+        0;
+    if (propertyId == 0) {
       throw const FormatException('Missing property_id.');
     }
 

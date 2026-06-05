@@ -1,25 +1,25 @@
-class UnescoSitesNetworkException implements Exception {
-  const UnescoSitesNetworkException(this.message);
+abstract class UnescoSitesException implements Exception {
+  const UnescoSitesException(this.message);
 
   final String message;
+}
+
+class UnescoSitesNetworkException extends UnescoSitesException {
+  const UnescoSitesNetworkException(super.message);
 
   @override
   String toString() => 'UnescoSitesNetworkException: $message';
 }
 
-class UnescoSitesParseException implements Exception {
-  const UnescoSitesParseException(this.message);
-
-  final String message;
+class UnescoSitesParseException extends UnescoSitesException {
+  const UnescoSitesParseException(super.message);
 
   @override
   String toString() => 'UnescoSitesParseException: $message';
 }
 
-class UnescoSitesEmptyResultException implements Exception {
-  const UnescoSitesEmptyResultException(this.message);
-
-  final String message;
+class UnescoSitesEmptyResultException extends UnescoSitesException {
+  const UnescoSitesEmptyResultException(super.message);
 
   @override
   String toString() => 'UnescoSitesEmptyResultException: $message';
