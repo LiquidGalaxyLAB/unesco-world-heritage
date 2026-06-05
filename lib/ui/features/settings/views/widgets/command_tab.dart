@@ -62,7 +62,7 @@ class CommandTab extends StatelessWidget {
         return Stack(
           children: [
             SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(46, 82, 46, 24),
+              padding: const EdgeInsets.fromLTRB(24, 82, 24, 24),
               child: Column(
                 children: [
                   if (state.errorMessage != null) ...[

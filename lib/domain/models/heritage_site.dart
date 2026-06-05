@@ -27,6 +27,11 @@ class HeritageSite {
     required this.rawCategory,
     required this.latitude,
     required this.longitude,
+    required this.isoCodes,
+    required this.description,
+    required this.dateInscribed,
+    required this.mainImageUrl,
+    required this.imageUrls,
   });
 
   final int propertyId;
@@ -36,4 +41,9 @@ class HeritageSite {
   final String rawCategory;
   final double latitude;
   final double longitude;
+  final String isoCodes;
+  final String description;
+  final String dateInscribed;
+  final String mainImageUrl;
+  final List<String> imageUrls;
 }

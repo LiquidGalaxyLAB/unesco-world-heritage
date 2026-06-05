@@ -22,6 +22,34 @@ class MainNavigationShell extends StatefulWidget {
 
 class _MainNavigationShellState extends State<MainNavigationShell>
     with SingleTickerProviderStateMixin {
+  static const List<_BottomNavDestination> _destinations = [
+    _BottomNavDestination(
+      label: 'Home',
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'Search',
+      icon: Icons.search,
+      selectedIcon: Icons.search_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'Auth',
+      icon: Icons.vpn_key_outlined,
+      selectedIcon: Icons.vpn_key_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'Settings',
+      icon: Icons.settings_outlined,
+      selectedIcon: Icons.settings_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'About',
+      icon: Icons.info_outline_rounded,
+      selectedIcon: Icons.info_rounded,
+    ),
+  ];
+
   int _currentIndex =
       3; // Default to Settings tab to showcase our implementation
   late final SettingsViewModel _settingsViewModel;
@@ -93,40 +121,84 @@ class _MainNavigationShellState extends State<MainNavigationShell>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(32.0),
-              child: NavigationBar(
-                selectedIndex: _currentIndex,
-                onDestinationSelected: _onTabSelected,
-                backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.95),
-                elevation: 0,
-                height: 72,
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home_rounded),
-                    label: 'Home',
+              child: Material(
+                color: AppColors.surfaceContainerHigh.withValues(alpha: 0.95),
+                child: SizedBox(
+                  height: 72,
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < _destinations.length; index++)
+                        Expanded(
+                          child: _BottomNavItem(
+                            destination: _destinations[index],
+                            isSelected: _currentIndex == index,
+                            onTap: () => _onTabSelected(index),
+                          ),
+                        ),
+                    ],
                   ),
-                  NavigationDestination(
-                    icon: Icon(Icons.search),
-                    selectedIcon: Icon(Icons.search_rounded),
-                    label: 'Search',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.vpn_key_outlined),
-                    selectedIcon: Icon(Icons.vpn_key_rounded),
-                    label: 'Auth',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.settings_outlined),
-                    selectedIcon: Icon(Icons.settings_rounded),
-                    label: 'Settings',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.info_outline_rounded),
-                    selectedIcon: Icon(Icons.info_rounded),
-                    label: 'About',
-                  ),
-                ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomNavDestination {
+  const _BottomNavDestination({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+}
+
+class _BottomNavItem extends StatelessWidget {
+  const _BottomNavItem({
+    required this.destination,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final _BottomNavDestination destination;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: isSelected,
+      button: true,
+      label: destination.label,
+      child: Tooltip(
+        message: destination.label,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 28,
+          containedInkWell: false,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.primaryContainer
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isSelected ? destination.selectedIcon : destination.icon,
+                color: isSelected
+                    ? AppColors.onPrimaryContainer
+                    : AppColors.onSurfaceVariant,
               ),
             ),
           ),
@@ -198,7 +270,6 @@ class SettingsView extends StatelessWidget {
     );
   }
 }
-
 
 class ConnectionTab extends StatefulWidget {
   const ConnectionTab({super.key, required this.viewModel});
@@ -330,7 +401,7 @@ class _ConnectionTabState extends State<ConnectionTab> {
         return Stack(
           children: [
             SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(50, 70, 50, 24),
+              padding: const EdgeInsets.fromLTRB(24, 70, 24, 24),
               child: Form(
                 key: _formKey,
                 child: Column(
