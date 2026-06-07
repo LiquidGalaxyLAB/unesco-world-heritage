@@ -192,4 +192,38 @@ class SettingsViewModel extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  Future<void> sendSetRefreshCommand() async {
+    if (!state.isConnected) return;
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.setRefresh();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to set refresh on LG. $error',
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> sendResetRefreshCommand() async {
+    if (!state.isConnected) return;
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.resetRefresh();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to reset refresh on LG. $error',
+      );
+    }
+    notifyListeners();
+  }
 }

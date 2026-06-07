@@ -29,20 +29,22 @@ class CommandTab extends StatelessWidget {
         child: FilledButton(
           onPressed: isEnabled ? onPressed : null,
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF343434),
+            backgroundColor: AppColors.primary,
             disabledBackgroundColor: const Color(0xFF343434),
-            foregroundColor: AppColors.onSurfaceVariant,
+            foregroundColor: AppColors.onPrimary,
             disabledForegroundColor: AppColors.onSurfaceVariant,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(28),
-              side: const BorderSide(color: AppColors.outlineVariant),
+              side: BorderSide(
+                color: isEnabled ? AppColors.primary : AppColors.outlineVariant,
+              ),
             ),
           ),
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppColors.onSurfaceVariant,
+              color: isEnabled ? AppColors.onPrimary : AppColors.onSurfaceVariant,
               fontWeight: FontWeight.w500,
             ),
           ),
