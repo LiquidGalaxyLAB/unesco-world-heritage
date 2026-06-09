@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer_animation/shimmer_animation.dart';
+
 import '../../../../../core/theme/app_colors.dart';
 
 class HeritageCard extends StatelessWidget {
@@ -33,8 +35,25 @@ class HeritageCard extends StatelessWidget {
             Image.network(
               imageUrl,
               fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) {
+                  return child;
+                }
+
+                return Shimmer(
+                  duration: const Duration(milliseconds: 1400),
+                  color: AppColors.onSurface,
+                  colorOpacity: 0.12,
+                  child: const ColoredBox(
+                    color: AppColors.surfaceContainerHighest,
+                  ),
+                );
+              },
               errorBuilder: (context, error, stackTrace) => const Center(
-                child: Icon(Icons.image_not_supported_rounded, color: AppColors.onSurfaceVariant),
+                child: Icon(
+                  Icons.image_not_supported_rounded,
+                  color: AppColors.onSurfaceVariant,
+                ),
               ),
             ),
             // Gradient Overlay for text readability
@@ -63,9 +82,9 @@ class HeritageCard extends StatelessWidget {
                   Text(
                     title,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppColors.onSurface,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: AppColors.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -73,9 +92,9 @@ class HeritageCard extends StatelessWidget {
                   Text(
                     location,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppColors.onSurface.withValues(alpha: 0.9),
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: AppColors.onSurface.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w700,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -83,8 +102,8 @@ class HeritageCard extends StatelessWidget {
                   Text(
                     category,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.onSurface.withValues(alpha: 0.8),
-                        ),
+                      color: AppColors.onSurface.withValues(alpha: 0.8),
+                    ),
                   ),
                 ],
               ),
@@ -95,4 +114,3 @@ class HeritageCard extends StatelessWidget {
     );
   }
 }
-

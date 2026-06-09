@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../domain/models/lg_connection_settings.dart';
 import '../../auth/views/auth_view.dart';
+import '../../heritage_sites/heritage_sites_dependencies.dart';
+import '../../heritage_sites/view_models/heritage_sites_view_model.dart';
 import '../../search/views/search_view.dart';
 import '../../about/views/about_view.dart';
 import '../settings_dependencies.dart';
@@ -53,6 +55,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   int _currentIndex =
       3; // Default to Settings tab to showcase our implementation
   late final SettingsViewModel _settingsViewModel;
+  late final HeritageSitesViewModel _heritageSitesViewModel;
   late final AnimationController _fadeController;
 
   @override
@@ -60,6 +63,8 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     super.initState();
     _settingsViewModel = SettingsDependencies.createViewModel();
     _settingsViewModel.loadSettings();
+    _heritageSitesViewModel = HeritageSitesDependencies.createSitesViewModel();
+    _heritageSitesViewModel.loadSites();
 
     _fadeController = AnimationController(
       vsync: this,
@@ -71,6 +76,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   @override
   void dispose() {
     _settingsViewModel.dispose();
+    _heritageSitesViewModel.dispose();
     _fadeController.dispose();
     super.dispose();
   }
@@ -89,7 +95,10 @@ class _MainNavigationShellState extends State<MainNavigationShell>
       case 0:
         return const _HomeTabPlaceholder();
       case 1:
-        return SearchView(viewModel: _settingsViewModel);
+        return SearchView(
+          viewModel: _settingsViewModel,
+          sitesViewModel: _heritageSitesViewModel,
+        );
       case 2:
         return AuthView(viewModel: _settingsViewModel);
       case 3:
