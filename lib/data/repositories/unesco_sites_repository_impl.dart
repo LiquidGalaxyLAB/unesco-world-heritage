@@ -23,8 +23,7 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
       sitesById[dto.propertyId] = _mapToDomain(dto);
     }
 
-    final sites = sitesById.values.toList(growable: false)
-      ..sort(_compareByNameThenId);
+    final sites = sitesById.values.toList(growable: false);
     _cachedSites = sites;
 
     return List<HeritageSite>.unmodifiable(sites);
@@ -109,16 +108,5 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
       mainImageUrl: dto.mainImageUrl,
       imageUrls: dto.imageUrls,
     );
-  }
-
-  int _compareByNameThenId(HeritageSite left, HeritageSite right) {
-    final nameComparison = left.name.toLowerCase().compareTo(
-      right.name.toLowerCase(),
-    );
-    if (nameComparison != 0) {
-      return nameComparison;
-    }
-
-    return left.propertyId.compareTo(right.propertyId);
   }
 }

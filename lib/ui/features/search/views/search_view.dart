@@ -1,32 +1,79 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/theme/app_colors.dart';
+import '../../heritage_sites/view_models/heritage_sites_view_model.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
-import 'widgets/heritage_card.dart';
 import 'widgets/filter_bottom_sheet.dart';
+import 'widgets/heritage_card.dart';
 
 class SearchView extends StatefulWidget {
-  final SettingsViewModel viewModel;
+  const SearchView({
+    super.key,
+    required this.viewModel,
+    required this.sitesViewModel,
+  });
 
-  const SearchView({super.key, required this.viewModel});
+  final SettingsViewModel viewModel;
+  final HeritageSitesViewModel sitesViewModel;
 
   @override
   State<SearchView> createState() => _SearchViewState();
 }
 
 class _SearchViewState extends State<SearchView> {
+  static const int _pageSize = 20;
+
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  int _visibleSiteCount = _pageSize;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_loadNextPage);
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController
+      ..removeListener(_loadNextPage)
+      ..dispose();
     super.dispose();
+  }
+
+  void _loadNextPage() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.extentAfter > 400) {
+      return;
+    }
+
+    final siteCount = widget.sitesViewModel.state.filteredSites.length;
+    if (_visibleSiteCount >= siteCount) {
+      return;
+    }
+
+    setState(() {
+      final nextPageSize = _visibleSiteCount + _pageSize;
+      _visibleSiteCount = nextPageSize < siteCount ? nextPageSize : siteCount;
+    });
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      _visibleSiteCount = _pageSize;
+    });
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    widget.sitesViewModel.search(query);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -55,13 +102,26 @@ class _SearchViewState extends State<SearchView> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: SearchBar(
                 controller: _searchController,
+                onChanged: _onSearchChanged,
                 hintText: 'Search Heritage Sites...',
-                hintStyle: const WidgetStatePropertyAll(TextStyle(color: AppColors.onSurfaceVariant)),
-                textStyle: WidgetStatePropertyAll(theme.textTheme.bodyLarge?.copyWith(color: AppColors.onSurface)),
-                leading: const Icon(Icons.search_rounded, color: AppColors.onSurfaceVariant),
+                hintStyle: const WidgetStatePropertyAll(
+                  TextStyle(color: AppColors.onSurfaceVariant),
+                ),
+                textStyle: WidgetStatePropertyAll(
+                  theme.textTheme.bodyLarge?.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                leading: const Icon(
+                  Icons.search_rounded,
+                  color: AppColors.onSurfaceVariant,
+                ),
                 trailing: [
                   IconButton(
-                    icon: const Icon(Icons.tune_rounded, color: AppColors.onSurfaceVariant),
+                    icon: const Icon(
+                      Icons.tune_rounded,
+                      color: AppColors.onSurfaceVariant,
+                    ),
                     onPressed: () {
                       showModalBottomSheet(
                         context: context,
@@ -72,40 +132,47 @@ class _SearchViewState extends State<SearchView> {
                     },
                   ),
                 ],
-                backgroundColor: WidgetStatePropertyAll(AppColors.surfaceContainerHigh.withValues(alpha: 0.5)),
+                backgroundColor: WidgetStatePropertyAll(
+                  AppColors.surfaceContainerHigh.withValues(alpha: 0.5),
+                ),
                 elevation: const WidgetStatePropertyAll(0),
-                side: const WidgetStatePropertyAll(BorderSide(color: AppColors.outlineVariant, width: 0.5)),
-                padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
+                side: const WidgetStatePropertyAll(
+                  BorderSide(color: AppColors.outlineVariant, width: 0.5),
+                ),
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 16),
+                ),
               ),
             ),
             const SizedBox(height: 24),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
-                itemCount: 6,
-                separatorBuilder: (context, index) => const SizedBox(height: 20),
-                itemBuilder: (context, index) {
-                  final titles = [
-                    'Bamiyan Valley', 'Minaret and Archaeological Remains of Jam', 'Butrint',
-                    'Djémila', 'Acropolis', 'Serengeti'
-                  ];
-                  final locations = [
-                    'Afghanistan', 'Afghanistan', 'Albania',
-                    'Algeria', 'Greece', 'Tanzania'
-                  ];
-                  final images = [
-                    'https://images.unsplash.com/photo-1587595431973-160d0d94add1?w=800&q=80',
-                    'https://images.unsplash.com/photo-1564507592208-52875692857e?w=800&q=80',
-                    'https://images.unsplash.com/photo-1582967635905-2d4e3eb1a3c6?w=800&q=80',
-                    'https://images.unsplash.com/photo-1504280741503-f32fe6a47a06?w=800&q=80',
-                    'https://images.unsplash.com/photo-1555993539-1732b0258235?w=800&q=80',
-                    'https://images.unsplash.com/photo-1516426122078-c23e76319801?w=800&q=80'
-                  ];
-                  return HeritageCard(
-                    title: titles[index],
-                    location: locations[index],
-                    imageUrl: images[index],
-                    category: 'Cultural', 
+              child: ListenableBuilder(
+                listenable: widget.sitesViewModel,
+                builder: (context, child) {
+                  final state = widget.sitesViewModel.state;
+                  if (state.isLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final sites = state.filteredSites;
+                  final visibleSiteCount = _visibleSiteCount < sites.length
+                      ? _visibleSiteCount
+                      : sites.length;
+                  return ListView.separated(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
+                    itemCount: visibleSiteCount,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 20),
+                    itemBuilder: (context, index) {
+                      final site = sites[index];
+                      return HeritageCard(
+                        title: site.name,
+                        location: site.country,
+                        imageUrl: site.mainImageUrl,
+                        category: site.rawCategory,
+                      );
+                    },
                   );
                 },
               ),
@@ -116,4 +183,3 @@ class _SearchViewState extends State<SearchView> {
     );
   }
 }
-

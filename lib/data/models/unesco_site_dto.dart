@@ -19,7 +19,10 @@ class UnescoSiteDto {
       throw const FormatException('Missing id_no.');
     }
 
-    final name = _readString(record, const <String>['name_en']);
+    String? name = _readString(record, const <String>['name_en']);
+    if (name != null) {
+      name = name.replaceAll(RegExp(r'</?(strong|b|em|i|mark|code)\b[^>]*>', caseSensitive: false), '');
+    }
     final rawCategory = _readString(record, const <String>['category']) ?? '';
     final coordinate = _readRecordCoordinate(record);
     if (name == null || coordinate == null) {
@@ -60,11 +63,14 @@ class UnescoSiteDto {
       throw const FormatException('Missing property_id.');
     }
 
-    final name = _readString(attributes, const <String>[
+    String? name = _readString(attributes, const <String>[
       'property_name_en',
       'element_name_en',
       'name_en',
     ]);
+    if (name != null) {
+      name = name.replaceAll(RegExp(r'</?(strong|b|em|i|mark|code)\b[^>]*>', caseSensitive: false), '');
+    }
     final country = _readString(attributes, const <String>[
       'property_states_name_en',
       'states_name_en',

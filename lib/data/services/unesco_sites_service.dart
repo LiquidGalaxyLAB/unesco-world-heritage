@@ -8,7 +8,7 @@ import 'unesco_api_exceptions.dart';
 class UnescoSitesService {
   UnescoSitesService({http.Client? client}) : _client = client ?? http.Client();
 
-  static const int pageSize = 1000;
+  static const int pageSize = 100;
   static const String _recordsEndpoint =
       'https://data.unesco.org/api/explore/v2.1/catalog/datasets/whc001/records';
   static const String _arcGisFallbackEndpoint =
@@ -154,19 +154,18 @@ class UnescoSitesService {
       );
     }
 
-    try {
-      return records
-          .map(
-            (record) => UnescoSiteDto.fromRecord(
-              Map<String, dynamic>.from(record as Map),
-            ),
-          )
-          .toList(growable: false);
-    } on FormatException catch (error) {
-      throw UnescoSitesParseException(error.message);
-    } catch (error) {
-      throw UnescoSitesParseException('Unable to parse UNESCO records: $error');
+    final parsedSites = <UnescoSiteDto>[];
+    for (final record in records) {
+      if (record is! Map) continue;
+      try {
+        parsedSites.add(
+          UnescoSiteDto.fromRecord(Map<String, dynamic>.from(record)),
+        );
+      } catch (_) {
+        // Skip invalid records to prevent the whole page from failing.
+      }
     }
+    return parsedSites;
   }
 
   List<UnescoSiteDto> _parseFeatures(Map<String, dynamic> json) {
@@ -177,18 +176,17 @@ class UnescoSitesService {
       );
     }
 
-    try {
-      return features
-          .map(
-            (feature) => UnescoSiteDto.fromFeature(
-              Map<String, dynamic>.from(feature as Map),
-            ),
-          )
-          .toList(growable: false);
-    } on FormatException catch (error) {
-      throw UnescoSitesParseException(error.message);
-    } catch (error) {
-      throw UnescoSitesParseException('Unable to parse UNESCO sites: $error');
+    final parsedSites = <UnescoSiteDto>[];
+    for (final feature in features) {
+      if (feature is! Map) continue;
+      try {
+        parsedSites.add(
+          UnescoSiteDto.fromFeature(Map<String, dynamic>.from(feature)),
+        );
+      } catch (_) {
+        // Skip invalid records to prevent the whole page from failing.
+      }
     }
+    return parsedSites;
   }
 }
