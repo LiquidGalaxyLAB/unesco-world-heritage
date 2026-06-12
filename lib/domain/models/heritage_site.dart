@@ -32,6 +32,8 @@ class HeritageSite {
     required this.dateInscribed,
     required this.mainImageUrl,
     required this.imageUrls,
+    required this.region,
+    required this.isDanger,
   });
 
   final int propertyId;
@@ -46,4 +48,6 @@ class HeritageSite {
   final String dateInscribed;
   final String mainImageUrl;
   final List<String> imageUrls;
+  final String region;
+  final bool isDanger;
 }

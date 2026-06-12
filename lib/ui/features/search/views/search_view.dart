@@ -127,7 +127,7 @@ class _SearchViewState extends State<SearchView> {
                         context: context,
                         isScrollControlled: true,
                         backgroundColor: Colors.transparent,
-                        builder: (context) => const FilterBottomSheet(),
+                        builder: (context) => FilterBottomSheet(viewModel: widget.sitesViewModel),
                       );
                     },
                   ),

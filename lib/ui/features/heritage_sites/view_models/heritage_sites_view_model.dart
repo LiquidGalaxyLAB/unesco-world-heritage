@@ -20,7 +20,16 @@ class HeritageSitesViewModel extends ChangeNotifier {
       final sites = await _repository.getAllSites();
       _state = _state.copyWith(
         sites: sites,
-        filteredSites: _filterSites(sites, _state.searchQuery),
+        filteredSites: _filterSites(
+          sites: sites,
+          query: _state.searchQuery,
+          regions: _state.selectedRegions,
+          states: _state.selectedStates,
+          categories: _state.selectedCategories,
+          startYear: _state.startYear,
+          endYear: _state.endYear,
+          showDangerSites: _state.showDangerSites,
+        ),
         isLoading: false,
       );
     } catch (_) {
@@ -42,7 +51,16 @@ class HeritageSitesViewModel extends ChangeNotifier {
       final sites = await _repository.getAllSites();
       _state = _state.copyWith(
         sites: sites,
-        filteredSites: _filterSites(sites, _state.searchQuery),
+        filteredSites: _filterSites(
+          sites: sites,
+          query: _state.searchQuery,
+          regions: _state.selectedRegions,
+          states: _state.selectedStates,
+          categories: _state.selectedCategories,
+          startYear: _state.startYear,
+          endYear: _state.endYear,
+          showDangerSites: _state.showDangerSites,
+        ),
         isLoading: false,
       );
     } catch (_) {
@@ -58,36 +76,66 @@ class HeritageSitesViewModel extends ChangeNotifier {
   void search(String query) {
     _state = _state.copyWith(
       searchQuery: query,
-      filteredSites: _filterSites(_state.sites, query),
+      filteredSites: _filterSites(
+        sites: _state.sites,
+        query: query,
+        regions: _state.selectedRegions,
+        states: _state.selectedStates,
+        categories: _state.selectedCategories,
+        startYear: _state.startYear,
+        endYear: _state.endYear,
+        showDangerSites: _state.showDangerSites,
+      ),
+    );
+    notifyListeners();
+  }
+
+  void applyFilters({
+    Set<String>? regions,
+    Set<String>? states,
+    Set<HeritageCategory>? categories,
+    int? startYear,
+    int? endYear,
+    bool? showDangerSites,
+  }) {
+    final newRegions = regions ?? _state.selectedRegions;
+    final newStates = states ?? _state.selectedStates;
+    final newCategories = categories ?? _state.selectedCategories;
+    final newStartYear = startYear ?? _state.startYear;
+    final newEndYear = endYear ?? _state.endYear;
+    final newShowDangerSites = showDangerSites ?? _state.showDangerSites;
+
+    _state = _state.copyWith(
+      selectedRegions: newRegions,
+      selectedStates: newStates,
+      selectedCategories: newCategories,
+      startYear: newStartYear,
+      endYear: newEndYear,
+      showDangerSites: newShowDangerSites,
+      filteredSites: _filterSites(
+        sites: _state.sites,
+        query: _state.searchQuery,
+        regions: newRegions,
+        states: newStates,
+        categories: newCategories,
+        startYear: newStartYear,
+        endYear: newEndYear,
+        showDangerSites: newShowDangerSites,
+      ),
     );
     notifyListeners();
   }
 
   void filterByCountry(String country) {
-    final normalizedCountry = country.trim().toLowerCase();
-    final sites = normalizedCountry.isEmpty
-        ? _state.sites
-        : _state.sites
-            .where((site) => site.country.toLowerCase() == normalizedCountry)
-            .toList(growable: false);
-
-    _state = _state.copyWith(
-      filteredSites: _filterSites(sites, _state.searchQuery),
-    );
-    notifyListeners();
+    applyFilters(states: {country});
   }
 
   void filterByCategory(HeritageCategory? category) {
-    final sites = category == null
-        ? _state.sites
-        : _state.sites
-            .where((site) => site.category == category)
-            .toList(growable: false);
-
-    _state = _state.copyWith(
-      filteredSites: _filterSites(sites, _state.searchQuery),
-    );
-    notifyListeners();
+    if (category == null) {
+      applyFilters(categories: {});
+    } else {
+      applyFilters(categories: {category});
+    }
   }
 
   void clearError() {
@@ -95,18 +143,53 @@ class HeritageSitesViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<HeritageSite> _filterSites(List<HeritageSite> sites, String query) {
-    final normalizedQuery = query.trim().toLowerCase();
-    if (normalizedQuery.isEmpty) {
-      return List<HeritageSite>.unmodifiable(sites);
-    }
+  List<HeritageSite> _filterSites({
+    required List<HeritageSite> sites,
+    required String query,
+    required Set<String> regions,
+    required Set<String> states,
+    required Set<HeritageCategory> categories,
+    required int? startYear,
+    required int? endYear,
+    required bool showDangerSites,
+  }) {
+    return sites.where((site) {
+      if (query.isNotEmpty) {
+        final normalizedQuery = query.trim().toLowerCase();
+        if (!site.name.toLowerCase().contains(normalizedQuery) &&
+            !site.country.toLowerCase().contains(normalizedQuery)) {
+          return false;
+        }
+      }
 
-    return sites
-        .where(
-          (site) =>
-              site.name.toLowerCase().contains(normalizedQuery) ||
-              site.country.toLowerCase().contains(normalizedQuery),
-        )
-        .toList(growable: false);
+      if (regions.isNotEmpty && !regions.contains(site.region)) {
+        return false;
+      }
+
+      if (states.isNotEmpty) {
+        final siteStates = site.country.split(',').map((s) => s.trim()).toList();
+        if (!siteStates.any((s) => states.contains(s))) {
+          return false;
+        }
+      }
+
+      if (categories.isNotEmpty && !categories.contains(site.category)) {
+        return false;
+      }
+
+      if (startYear != null || endYear != null) {
+        final year = int.tryParse(site.dateInscribed);
+        if (year != null) {
+          if (startYear != null && year < startYear) return false;
+          if (endYear != null && year > endYear) return false;
+        }
+      }
+
+      if (showDangerSites && !site.isDanger) {
+        return false;
+      }
+
+      return true;
+    }).toList(growable: false);
   }
 }

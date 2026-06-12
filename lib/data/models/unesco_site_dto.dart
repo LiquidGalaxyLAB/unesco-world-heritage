@@ -11,6 +11,8 @@ class UnescoSiteDto {
     required this.dateInscribed,
     required this.mainImageUrl,
     required this.imageUrls,
+    required this.region,
+    required this.isDanger,
   });
 
   factory UnescoSiteDto.fromRecord(Map<String, dynamic> record) {
@@ -47,6 +49,8 @@ class UnescoSiteDto {
           _readString(record, const <String>['date_inscribed']) ?? '',
       mainImageUrl: _readString(record, const <String>['main_image_url']) ?? '',
       imageUrls: _readImageUrls(record),
+      region: _readString(record, const <String>['region', 'region_en']) ?? '',
+      isDanger: _readString(record, const <String>['danger'])?.toLowerCase() == 'true',
     );
   }
 
@@ -120,6 +124,8 @@ class UnescoSiteDto {
       mainImageUrl:
           _readString(attributes, const <String>['main_image_url']) ?? '',
       imageUrls: _readImageUrls(attributes),
+      region: _readString(attributes, const <String>['region', 'region_en', 'property_region', 'property_region_en']) ?? '',
+      isDanger: _readString(attributes, const <String>['danger', 'in_danger'])?.toLowerCase() == 'true',
     );
   }
 
@@ -134,6 +140,8 @@ class UnescoSiteDto {
   final String dateInscribed;
   final String mainImageUrl;
   final List<String> imageUrls;
+  final String region;
+  final bool isDanger;
 
   static Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) {

@@ -21,13 +21,13 @@ class UnescoSitesService {
     var offset = 0;
 
     while (true) {
-      final page = await fetchSitesPage(offset: offset);
-      if (page.isEmpty) {
+      final result = await _fetchSitesPageInternal(offset: offset);
+      if (result.rawCount == 0) {
         break;
       }
 
-      sites.addAll(page);
-      if (page.length < pageSize) {
+      sites.addAll(result.sites);
+      if (result.rawCount < pageSize) {
         break;
       }
 
@@ -44,6 +44,11 @@ class UnescoSitesService {
   }
 
   Future<List<UnescoSiteDto>> fetchSitesPage({int offset = 0}) async {
+    final result = await _fetchSitesPageInternal(offset: offset);
+    return result.sites;
+  }
+
+  Future<_PageResult> _fetchSitesPageInternal({int offset = 0}) async {
     try {
       final json = await _getJson(_buildRecordsUri(offset: offset));
       return _parseRecords(json);
@@ -63,7 +68,7 @@ class UnescoSitesService {
     List<UnescoSiteDto> sites;
     try {
       final json = await _getJson(_buildRecordByIdUri(propertyId));
-      sites = _parseRecords(json);
+      sites = _parseRecords(json).sites;
     } on UnescoSitesException {
       final json = await _getJson(
         _buildArcGisUri(
@@ -72,7 +77,7 @@ class UnescoSitesService {
           resultRecordCount: 1,
         ),
       );
-      sites = _parseFeatures(json);
+      sites = _parseFeatures(json).sites;
     }
 
     if (sites.isEmpty) {
@@ -146,7 +151,7 @@ class UnescoSitesService {
     }
   }
 
-  List<UnescoSiteDto> _parseRecords(Map<String, dynamic> json) {
+  _PageResult _parseRecords(Map<String, dynamic> json) {
     final records = json['results'];
     if (records is! List) {
       throw const UnescoSitesParseException(
@@ -165,10 +170,10 @@ class UnescoSitesService {
         // Skip invalid records to prevent the whole page from failing.
       }
     }
-    return parsedSites;
+    return _PageResult(parsedSites, records.length);
   }
 
-  List<UnescoSiteDto> _parseFeatures(Map<String, dynamic> json) {
+  _PageResult _parseFeatures(Map<String, dynamic> json) {
     final features = json['features'];
     if (features is! List) {
       throw const UnescoSitesParseException(
@@ -187,6 +192,12 @@ class UnescoSitesService {
         // Skip invalid records to prevent the whole page from failing.
       }
     }
-    return parsedSites;
+    return _PageResult(parsedSites, features.length);
   }
+}
+
+class _PageResult {
+  const _PageResult(this.sites, this.rawCount);
+  final List<UnescoSiteDto> sites;
+  final int rawCount;
 }

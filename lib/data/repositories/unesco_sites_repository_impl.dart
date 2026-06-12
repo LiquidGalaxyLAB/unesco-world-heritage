@@ -107,6 +107,8 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
       dateInscribed: dto.dateInscribed,
       mainImageUrl: dto.mainImageUrl,
       imageUrls: dto.imageUrls,
+      region: dto.region,
+      isDanger: dto.isDanger,
     );
   }
 }
