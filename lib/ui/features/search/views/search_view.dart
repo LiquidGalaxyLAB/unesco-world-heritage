@@ -136,6 +136,11 @@ class _SearchViewState extends State<SearchView> {
                   AppColors.surfaceContainerHigh.withValues(alpha: 0.5),
                 ),
                 elevation: const WidgetStatePropertyAll(0),
+                shape: WidgetStatePropertyAll(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
                 side: const WidgetStatePropertyAll(
                   BorderSide(color: AppColors.outlineVariant, width: 0.5),
                 ),
