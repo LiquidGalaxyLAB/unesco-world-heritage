@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_colors.dart';
 
-enum _FilterView { main, region, stateNames }
+enum _FilterView { main, region, stateNames, category }
 
 class FilterBottomSheet extends StatefulWidget {
   const FilterBottomSheet({super.key});
@@ -42,6 +42,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
     'Argentina',
   ];
   String _stateSearchQuery = '';
+  final Set<String> _selectedCategories = {'Cultural', 'Natural'};
 
   Widget _buildFilterTile(String title, VoidCallback onTap) {
     return Container(
@@ -79,7 +80,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
               ? _buildMainView(context, theme)
               : _currentView == _FilterView.region
                   ? _buildRegionView(context, theme)
-                  : _buildStateNamesView(context, theme),
+                  : _currentView == _FilterView.stateNames
+                      ? _buildStateNamesView(context, theme)
+                      : _buildCategoryView(context, theme),
         ),
       ),
     );
@@ -193,7 +196,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                   _buildFilterTile('State Names', () {
                     setState(() => _currentView = _FilterView.stateNames);
                   }),
-                  _buildFilterTile('Category', () {}),
+                  _buildFilterTile('Category', () {
+                    setState(() => _currentView = _FilterView.category);
+                  }),
                   
                   const SizedBox(height: 8),
                   Row(
@@ -234,6 +239,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                     _showDangerSites = false;
                     _selectedRegions.clear();
                     _selectedStates.clear();
+                    _selectedCategories.clear();
                   });
                 },
                 child: const Text(
@@ -497,6 +503,164 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                     _currentView = _FilterView.main;
                     _stateSearchQuery = '';
                   });
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFE0E0E0),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                ),
+                child: const Text(
+                  'Save Preferences',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryCard(String title, String imagePath, {bool isFullWidth = false}) {
+    final isSelected = _selectedCategories.contains(title);
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedCategories.remove(title);
+          } else {
+            _selectedCategories.add(title);
+          }
+        });
+      },
+      child: Container(
+        height: 140,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          image: DecorationImage(
+            image: AssetImage(imagePath),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Colors.black.withValues(alpha: 0.4),
+              BlendMode.darken,
+            ),
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              bottom: 12,
+              left: 12,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isSelected ? Colors.transparent : Colors.white,
+                    width: 2,
+                  ),
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check, size: 18, color: Colors.black)
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryView(BuildContext context, ThemeData theme) {
+    return Padding(
+      key: const ValueKey('category_view'),
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                padding: EdgeInsets.zero,
+                alignment: Alignment.centerLeft,
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+                onPressed: () => setState(() => _currentView = _FilterView.main),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Category',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                padding: EdgeInsets.zero,
+                alignment: Alignment.centerRight,
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(color: Color(0xFF333333), height: 1),
+          const SizedBox(height: 16),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _buildCategoryCard('Cultural', 'assets/images/Cultural_site.png')),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildCategoryCard('Mixed', 'assets/images/Mixed_site.png')),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildCategoryCard('Natural', 'assets/images/Natural_site.png', isFullWidth: true),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _selectedCategories.clear();
+                  });
+                },
+                child: const Text(
+                  'clear filters',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.white70,
+                  ),
+                ),
+              ),
+              FilledButton(
+                onPressed: () {
+                  setState(() => _currentView = _FilterView.main);
                 },
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFFE0E0E0),
