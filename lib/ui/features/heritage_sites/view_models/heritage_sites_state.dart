@@ -7,6 +7,12 @@ class HeritageSitesState {
     this.searchQuery = '',
     this.isLoading = false,
     this.errorMessage,
+    this.selectedRegions = const <String>{},
+    this.selectedStates = const <String>{},
+    this.selectedCategories = const <HeritageCategory>{},
+    this.startYear,
+    this.endYear,
+    this.showDangerSites = false,
   });
 
   final List<HeritageSite> sites;
@@ -14,6 +20,12 @@ class HeritageSitesState {
   final String searchQuery;
   final bool isLoading;
   final String? errorMessage;
+  final Set<String> selectedRegions;
+  final Set<String> selectedStates;
+  final Set<HeritageCategory> selectedCategories;
+  final int? startYear;
+  final int? endYear;
+  final bool showDangerSites;
 
   HeritageSitesState copyWith({
     List<HeritageSite>? sites,
@@ -22,6 +34,12 @@ class HeritageSitesState {
     bool? isLoading,
     String? errorMessage,
     bool clearError = false,
+    Set<String>? selectedRegions,
+    Set<String>? selectedStates,
+    Set<HeritageCategory>? selectedCategories,
+    int? startYear,
+    int? endYear,
+    bool? showDangerSites,
   }) {
     return HeritageSitesState(
       sites: sites ?? this.sites,
@@ -29,6 +47,12 @@ class HeritageSitesState {
       searchQuery: searchQuery ?? this.searchQuery,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      selectedRegions: selectedRegions ?? this.selectedRegions,
+      selectedStates: selectedStates ?? this.selectedStates,
+      selectedCategories: selectedCategories ?? this.selectedCategories,
+      startYear: startYear ?? this.startYear,
+      endYear: endYear ?? this.endYear,
+      showDangerSites: showDangerSites ?? this.showDangerSites,
     );
   }
 }

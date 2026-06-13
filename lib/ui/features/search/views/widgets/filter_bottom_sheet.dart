@@ -1,48 +1,115 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../domain/models/heritage_site.dart';
+import '../../../heritage_sites/view_models/heritage_sites_view_model.dart';
 
 enum _FilterView { main, region, stateNames, category }
 
 class FilterBottomSheet extends StatefulWidget {
-  const FilterBottomSheet({super.key});
+  const FilterBottomSheet({super.key, required this.viewModel});
+  
+  final HeritageSitesViewModel viewModel;
 
   @override
   State<FilterBottomSheet> createState() => _FilterBottomSheetState();
 }
 
 class _FilterBottomSheetState extends State<FilterBottomSheet> {
-  RangeValues _yearRange = const RangeValues(1999, 2009);
-  bool _showDangerSites = false;
+  late RangeValues _yearRange;
+  late bool _showDangerSites;
   
   _FilterView _currentView = _FilterView.main;
-  final Set<String> _selectedRegions = {'Africa', 'Arab States'};
+  late final Set<String> _selectedRegions;
+  late List<String> _allRegions;
 
-  final List<String> _allRegions = [
-    'Africa',
-    'Arab States',
-    'Asia and the Pacific',
-    'Europe and North America',
-    'Latin America and the Caribbean',
-  ];
-
-  final Set<String> _selectedStates = {
-    'Afghanistan',
-    'Albania',
-    'Algeria',
-    'Andorra'
-  };
-
-  final List<String> _allStates = [
-    'Afghanistan',
-    'Albania',
-    'Algeria',
-    'Andorra',
-    'Angola',
-    'Antigua and Barbuda',
-    'Argentina',
-  ];
+  late final Set<String> _selectedStates;
+  late List<String> _allStates;
+  
   String _stateSearchQuery = '';
-  final Set<String> _selectedCategories = {'Cultural', 'Natural'};
+  late final Set<String> _selectedCategories;
+  
+  late final int _minYear;
+  late final int _maxYear;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = widget.viewModel.state;
+    final sites = state.sites;
+    
+    final regionsSet = <String>{};
+    final statesSet = <String>{};
+    int minYear = 2025;
+    int maxYear = 1978;
+    
+    for (final site in sites) {
+      if (site.region.isNotEmpty) {
+        regionsSet.add(site.region);
+      }
+      if (site.country.isNotEmpty) {
+        final parts = site.country.split(',');
+        for (final p in parts) {
+          final st = p.trim();
+          if (st.isNotEmpty) statesSet.add(st);
+        }
+      }
+      final yearInt = int.tryParse(site.dateInscribed);
+      if (yearInt != null && yearInt > 0) {
+        if (yearInt < minYear) minYear = yearInt;
+        if (yearInt > maxYear) maxYear = yearInt;
+      }
+    }
+    
+    _allRegions = regionsSet.toList()..sort();
+    _allStates = statesSet.toList()..sort();
+    
+    if (minYear > maxYear) {
+      minYear = 1978;
+      maxYear = DateTime.now().year;
+    }
+    
+    _minYear = minYear;
+    _maxYear = maxYear;
+    
+    _selectedRegions = Set.from(state.selectedRegions);
+    _selectedStates = Set.from(state.selectedStates);
+    _selectedCategories = state.selectedCategories.map((c) {
+      switch (c) {
+        case HeritageCategory.cultural: return 'Cultural';
+        case HeritageCategory.natural: return 'Natural';
+        case HeritageCategory.mixed: return 'Mixed';
+        default: return '';
+      }
+    }).where((s) => s.isNotEmpty).toSet();
+    
+    _showDangerSites = state.showDangerSites;
+    
+    _yearRange = RangeValues(
+      (state.startYear ?? _minYear).toDouble(),
+      (state.endYear ?? _maxYear).toDouble(),
+    );
+  }
+
+  void _applyFiltersAndClose() {
+    final categories = _selectedCategories.map((c) {
+      switch (c) {
+        case 'Cultural': return HeritageCategory.cultural;
+        case 'Natural': return HeritageCategory.natural;
+        case 'Mixed': return HeritageCategory.mixed;
+        default: return HeritageCategory.unknown;
+      }
+    }).where((c) => c != HeritageCategory.unknown).toSet();
+
+    widget.viewModel.applyFilters(
+      regions: _selectedRegions,
+      states: _selectedStates,
+      categories: categories,
+      startYear: _yearRange.start.toInt(),
+      endYear: _yearRange.end.toInt(),
+      showDangerSites: _showDangerSites,
+    );
+    Navigator.pop(context);
+  }
 
   Widget _buildFilterTile(String title, VoidCallback onTap) {
     return Container(
@@ -161,9 +228,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                           ),
                           child: RangeSlider(
                             values: _yearRange,
-                            min: 1978,
-                            max: 2025,
-                            divisions: 2025 - 1978,
+                            min: _minYear.toDouble(),
+                            max: _maxYear.toDouble(),
+                            divisions: _maxYear - _minYear > 0 ? _maxYear - _minYear : 1,
                             labels: RangeLabels(
                               _yearRange.start.toInt().toString(),
                               _yearRange.end.toInt().toString(),
@@ -175,13 +242,13 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                             },
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10.0),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10.0),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('1978', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                              Text('2025', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              Text('$_minYear', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              Text('$_maxYear', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                             ],
                           ),
                         ),
@@ -235,7 +302,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
               TextButton(
                 onPressed: () {
                   setState(() {
-                    _yearRange = const RangeValues(1978, 2025);
+                    _yearRange = RangeValues(_minYear.toDouble(), _maxYear.toDouble());
                     _showDangerSites = false;
                     _selectedRegions.clear();
                     _selectedStates.clear();
@@ -252,7 +319,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 ),
               ),
               FilledButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: _applyFiltersAndClose,
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFFE0E0E0),
                   foregroundColor: Colors.black,
