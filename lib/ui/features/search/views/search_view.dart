@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../heritage_sites/view_models/heritage_sites_view_model.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
+import '../../heritage_sites/views/heritage_site_detail_view.dart';
 import 'widgets/filter_bottom_sheet.dart';
 import 'widgets/heritage_card.dart';
 
@@ -171,11 +172,23 @@ class _SearchViewState extends State<SearchView> {
                         const SizedBox(height: 20),
                     itemBuilder: (context, index) {
                       final site = sites[index];
-                      return HeritageCard(
-                        title: site.name,
-                        location: site.country,
-                        imageUrl: site.mainImageUrl,
-                        category: site.rawCategory,
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => HeritageSiteDetailView(
+                                site: site,
+                                settingsViewModel: widget.viewModel,
+                              ),
+                            ),
+                          );
+                        },
+                        child: HeritageCard(
+                          title: site.name,
+                          location: site.country,
+                          imageUrl: site.mainImageUrl,
+                          category: site.rawCategory,
+                        ),
                       );
                     },
                   );
