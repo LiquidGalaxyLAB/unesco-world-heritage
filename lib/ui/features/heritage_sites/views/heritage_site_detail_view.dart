@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../data/services/weather_service.dart';
 import '../../../../domain/models/heritage_site.dart';
+import '../../../../domain/models/weather_data.dart';
+import '../heritage_sites_dependencies.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
 
@@ -24,10 +28,13 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   String _selectedTab = 'Overview';
   bool _isAudioPlaying = false;
   late final WebViewController _mapController;
+  bool _isLoadingWeather = true;
+  WeatherData? _weatherData;
 
   @override
   void initState() {
     super.initState();
+    _fetchWeather();
     const String mapsApiKey = String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
     
     final htmlContent = '''
@@ -64,6 +71,49 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     _mapController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..loadHtmlString(htmlContent);
+  }
+
+  Future<void> _fetchWeather() async {
+    double targetLat = widget.site.latitude;
+    double targetLng = widget.site.longitude;
+
+    try {
+      final geometryRepo = HeritageSitesDependencies.createGeometryRepository();
+      final geometry = await geometryRepo.getSiteGeometry(widget.site.propertyId);
+      
+      if (geometry != null && !geometry.boundary.isEmpty) {
+        double sumLat = 0;
+        double sumLng = 0;
+        int count = 0;
+        
+        for (final ring in geometry.boundary.rings) {
+          for (final point in ring) {
+            sumLat += point.latitude;
+            sumLng += point.longitude;
+            count++;
+          }
+        }
+        
+        if (count > 0) {
+          targetLat = sumLat / count;
+          targetLng = sumLng / count;
+        }
+      }
+    } catch (_) {
+      // Fallback to default coordinates on error
+    }
+
+    final service = WeatherService();
+    final data = await service.fetchCurrentWeather(
+      targetLat,
+      targetLng,
+    );
+    if (mounted) {
+      setState(() {
+        _weatherData = data;
+        _isLoadingWeather = false;
+      });
+    }
   }
 
   @override
@@ -170,91 +220,95 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                 
                 const SizedBox(height: 24),
                 
-                // Chips
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildChip(
-                        assetPath: 'assets/images/location_icon.png',
-                        label: widget.site.country.split(',').first.trim(),
-                      ),
-                      _buildChip(
-                        assetPath: _getCategoryIcon(widget.site.category),
-                        label: widget.site.rawCategory,
-                      ),
-                      _buildChip(
-                        assetPath: 'assets/images/danger_icon.png',
-                        label: widget.site.isDanger ? 'True' : 'False',
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 8),
-                
-                // Inscription Year Chip
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: _buildChip(
-                    assetPath: 'assets/images/inscription_icon.png',
-                    label: 'Inscription Year: ${widget.site.dateInscribed}',
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Explore Card
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                if (_selectedTab == 'Overview') ...[
+                  // Chips
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        Expanded(
-                          child: Text(
-                            'Explore ${widget.site.name}',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
+                        _buildChip(
+                          assetPath: 'assets/images/location_icon.png',
+                          label: widget.site.country.split(',').first.trim(),
                         ),
-                        const SizedBox(width: 16),
-                        Container(
-                          decoration: const BoxDecoration(
-                            color: AppColors.surfaceVariant,
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            icon: Icon(
-                              _isAudioPlaying ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                              color: AppColors.onSurface,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _isAudioPlaying = !_isAudioPlaying;
-                              });
-                            },
-                          ),
+                        _buildChip(
+                          assetPath: _getCategoryIcon(widget.site.category),
+                          label: widget.site.rawCategory,
+                        ),
+                        _buildChip(
+                          assetPath: 'assets/images/danger_icon.png',
+                          label: widget.site.isDanger ? 'True' : 'False',
                         ),
                       ],
                     ),
                   ),
-                ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Inscription Year Chip
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _buildChip(
+                      assetPath: 'assets/images/inscription_icon.png',
+                      label: 'Inscription Year: ${widget.site.dateInscribed}',
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Explore Card
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Explore ${widget.site.name}',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: AppColors.surfaceVariant,
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: Icon(
+                                _isAudioPlaying ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                                color: AppColors.onSurface,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _isAudioPlaying = !_isAudioPlaying;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  _buildClimateTab(theme),
+                ],
                 
                 const SizedBox(height: 24), // Standard bottom padding
               ],
@@ -370,6 +424,130 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildClimateTab(ThemeData theme) {
+    if (_isLoadingWeather) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Row(
+          children: [
+            _buildShimmerCard(),
+            const SizedBox(width: 16),
+            _buildShimmerCard(),
+            const SizedBox(width: 16),
+            _buildShimmerCard(),
+          ],
+        ),
+      );
+    }
+
+    final weather = _weatherData;
+    final tempValue = weather != null ? '${weather.temperature.round()} °C' : '-- °C';
+    final feelsLike = weather != null ? 'Feels like ${weather.feelsLike.round()}°C' : 'Feels like --°C';
+    final windValue = weather != null ? '${weather.windSpeed.round()} km/h' : '-- km/h';
+    final windDir = weather != null ? 'Direction: ${weather.windDirection}°' : 'Direction: --°';
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          _buildClimateCard(
+            theme: theme,
+            icon: Icons.cloud_outlined,
+            value: tempValue,
+            label: feelsLike,
+          ),
+          const SizedBox(width: 16),
+          _buildClimateCard(
+            theme: theme,
+            icon: Icons.air_rounded,
+            value: windValue,
+            label: windDir,
+          ),
+          const SizedBox(width: 16),
+          _buildClimateCard(
+            theme: theme,
+            icon: Icons.travel_explore_rounded,
+            value: 'Nov - Feb',
+            label: 'Best Season',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClimateCard({
+    required ThemeData theme,
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      width: 130,
+      height: 160,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 40, color: AppColors.primary),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShimmerCard() {
+    return Shimmer(
+      duration: const Duration(milliseconds: 1400),
+      color: AppColors.onSurface,
+      colorOpacity: 0.12,
+      child: Container(
+        width: 130,
+        height: 160,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppColors.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
       ),
     );
   }

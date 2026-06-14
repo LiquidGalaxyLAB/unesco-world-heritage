@@ -16,7 +16,7 @@ class LGActionButtons extends StatelessWidget {
   final VoidCallback onClearPressed;
 
   Color _getForegroundColor(bool isConnected) {
-    return isConnected ? AppColors.onErrorContainer : AppColors.onPrimary;
+    return isConnected ? AppColors.onErrorContainer : AppColors.onSurface;
   }
 
   @override
@@ -31,7 +31,7 @@ class LGActionButtons extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: isConnected
                   ? AppColors.error
-                  : AppColors.lgButton,
+                  : AppColors.surfaceContainerHighest,
               foregroundColor: _getForegroundColor(isConnected),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(28),
@@ -40,7 +40,7 @@ class LGActionButtons extends StatelessWidget {
             child: Text(
               isConnected ? 'Disconnect LG' : 'Connect to LG',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.onPrimaryContainer,
+                color: _getForegroundColor(isConnected),
                 fontWeight: FontWeight.w800,
               ),
             ),

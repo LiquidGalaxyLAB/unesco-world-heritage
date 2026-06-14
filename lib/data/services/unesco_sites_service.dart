@@ -20,18 +20,34 @@ class UnescoSitesService {
     final sites = <UnescoSiteDto>[];
     var offset = 0;
 
-    while (true) {
-      final result = await _fetchSitesPageInternal(offset: offset);
-      if (result.rawCount == 0) {
-        break;
-      }
+    final firstPage = await _fetchSitesPageInternal(offset: offset);
+    sites.addAll(firstPage.sites);
 
-      sites.addAll(result.sites);
-      if (result.rawCount < pageSize) {
-        break;
+    if (firstPage.totalCount > pageSize) {
+      final futures = <Future<_PageResult>>[];
+      for (int i = pageSize; i < firstPage.totalCount; i += pageSize) {
+        futures.add(_fetchSitesPageInternal(offset: i));
       }
-
+      final results = await Future.wait(futures);
+      for (final result in results) {
+        sites.addAll(result.sites);
+      }
+    } else if (firstPage.totalCount == 0 && firstPage.rawCount == pageSize) {
+      // Fallback for APIs that don't return total_count
       offset += pageSize;
+      while (true) {
+        final result = await _fetchSitesPageInternal(offset: offset);
+        if (result.rawCount == 0) {
+          break;
+        }
+
+        sites.addAll(result.sites);
+        if (result.rawCount < pageSize) {
+          break;
+        }
+
+        offset += pageSize;
+      }
     }
 
     if (sites.isEmpty) {
@@ -170,7 +186,7 @@ class UnescoSitesService {
         // Skip invalid records to prevent the whole page from failing.
       }
     }
-    return _PageResult(parsedSites, records.length);
+    return _PageResult(parsedSites, records.length, totalCount: json['total_count'] as int? ?? 0);
   }
 
   _PageResult _parseFeatures(Map<String, dynamic> json) {
@@ -197,7 +213,8 @@ class UnescoSitesService {
 }
 
 class _PageResult {
-  const _PageResult(this.sites, this.rawCount);
+  const _PageResult(this.sites, this.rawCount, {this.totalCount = 0});
   final List<UnescoSiteDto> sites;
   final int rawCount;
+  final int totalCount;
 }
