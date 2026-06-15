@@ -4,9 +4,15 @@ import 'package:http/http.dart' as http;
 
 import '../models/unesco_site_dto.dart';
 import 'unesco_api_exceptions.dart';
+import 'wikipedia_image_service.dart';
 
 class UnescoSitesService {
-  UnescoSitesService({http.Client? client}) : _client = client ?? http.Client();
+  UnescoSitesService({
+    http.Client? client,
+    WikipediaImageService? wikipediaImageService,
+  }) : _client = client ?? http.Client(),
+       _wikipediaImageService =
+           wikipediaImageService ?? WikipediaImageService(client: client);
 
   static const int pageSize = 100;
   static const String _recordsEndpoint =
@@ -15,6 +21,7 @@ class UnescoSitesService {
       'https://services6.arcgis.com/eMd5K6XXEvJETxfQ/ArcGIS/rest/services/prd_whc_sites_dossiers_elements_v2_view/FeatureServer/1/query';
 
   final http.Client _client;
+  final WikipediaImageService _wikipediaImageService;
 
   Future<List<UnescoSiteDto>> fetchAllSites() async {
     final sites = <UnescoSiteDto>[];
@@ -65,9 +72,10 @@ class UnescoSitesService {
   }
 
   Future<_PageResult> _fetchSitesPageInternal({int offset = 0}) async {
+    _PageResult result;
     try {
       final json = await _getJson(_buildRecordsUri(offset: offset));
-      return _parseRecords(json);
+      result = _parseRecords(json);
     } on UnescoSitesException {
       final json = await _getJson(
         _buildArcGisUri(
@@ -76,8 +84,10 @@ class UnescoSitesService {
           resultRecordCount: pageSize,
         ),
       );
-      return _parseFeatures(json);
+      result = _parseFeatures(json);
     }
+
+    return _addMissingImages(result);
   }
 
   Future<UnescoSiteDto> fetchSiteById(int propertyId) async {
@@ -102,7 +112,25 @@ class UnescoSitesService {
       );
     }
 
-    return sites.first;
+    return _addMissingImage(sites.first);
+  }
+
+  Future<_PageResult> _addMissingImages(_PageResult result) async {
+    final sites = await Future.wait(result.sites.map(_addMissingImage));
+    return _PageResult(sites, result.rawCount, totalCount: result.totalCount);
+  }
+
+  Future<UnescoSiteDto> _addMissingImage(UnescoSiteDto site) async {
+    if (site.mainImageUrl.isNotEmpty || site.imageUrls.isNotEmpty) {
+      return site;
+    }
+
+    final imageUrl = await _wikipediaImageService.fetchImageUrl(site.name);
+    if (imageUrl == null) {
+      return site;
+    }
+
+    return site.copyWith(mainImageUrl: imageUrl, imageUrls: <String>[imageUrl]);
   }
 
   Uri _buildRecordsUri({required int offset}) {
@@ -186,7 +214,11 @@ class UnescoSitesService {
         // Skip invalid records to prevent the whole page from failing.
       }
     }
-    return _PageResult(parsedSites, records.length, totalCount: json['total_count'] as int? ?? 0);
+    return _PageResult(
+      parsedSites,
+      records.length,
+      totalCount: json['total_count'] as int? ?? 0,
+    );
   }
 
   _PageResult _parseFeatures(Map<String, dynamic> json) {
