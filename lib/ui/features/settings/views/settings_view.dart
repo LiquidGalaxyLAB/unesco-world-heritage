@@ -14,6 +14,7 @@ import 'widgets/lg_action_buttons.dart';
 import 'widgets/lg_connection_header.dart';
 import 'widgets/lg_error_card.dart';
 import 'widgets/lg_text_field.dart';
+import '../../home/views/home_view.dart';
 
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
@@ -53,7 +54,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   ];
 
   int _currentIndex =
-      3; // Default to Settings tab to showcase our implementation
+      0; // Default to Home tab
   late final SettingsViewModel _settingsViewModel;
   late final HeritageSitesViewModel _heritageSitesViewModel;
   late final AnimationController _fadeController;
@@ -93,7 +94,10 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   Widget _buildBody() {
     switch (_currentIndex) {
       case 0:
-        return const _HomeTabPlaceholder();
+        return HomeView(
+          settingsViewModel: _settingsViewModel,
+          sitesViewModel: _heritageSitesViewModel,
+        );
       case 1:
         return SearchView(
           viewModel: _settingsViewModel,
@@ -677,223 +681,6 @@ class AboutTab extends StatelessWidget {
   }
 }
 
-class _HomeTabPlaceholder extends StatelessWidget {
-  const _HomeTabPlaceholder();
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Home'),
-        backgroundColor: AppColors.background,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Discover the World\'s\nHeritage',
-              style: theme.textTheme.headlineLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                height: 1.2,
-                color: AppColors.onSurface,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              height: 240,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: const LinearGradient(
-                  colors: [AppColors.primaryContainer, AppColors.background],
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
-                ),
-                border: Border.all(color: AppColors.outlineVariant),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.15,
-                      child: Image.asset(
-                        'assets/images/Unesco_App_LOGO.png',
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.secondary.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: const Text(
-                            'Featured Site',
-                            style: TextStyle(
-                              color: AppColors.secondary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Machu Picchu',
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            color: AppColors.onSurface,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'Cusco Region, Peru',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'QUICK CONNECTIONS',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.outlineVariant),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.cloud_queue_rounded,
-                    color: AppColors.primary,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Liquid Galaxy Rig status',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Text(
-                          'Go to Settings to configure the SSH connection details.',
-                          style: TextStyle(color: AppColors.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
-class _MapTabPlaceholder extends StatelessWidget {
-  const _MapTabPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Interactive Map'),
-        backgroundColor: AppColors.background,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Heritage Map',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.onSurface,
-              ),
-            ),
-            const Text(
-              'Locate UNESCO World Heritage sites globally and fly to them instantly.',
-              style: TextStyle(color: AppColors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.outlineVariant),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.map_rounded,
-                        size: 64,
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Map Visualization Sandbox',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: AppColors.onSurface,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Map details and active coordinates will load here.',
-                        style: TextStyle(color: AppColors.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

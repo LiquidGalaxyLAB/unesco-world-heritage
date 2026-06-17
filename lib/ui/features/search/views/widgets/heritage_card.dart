@@ -114,3 +114,58 @@ class HeritageCard extends StatelessWidget {
     );
   }
 }
+
+class HeritageCardSkeleton extends StatelessWidget {
+  const HeritageCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      duration: const Duration(milliseconds: 1400),
+      color: AppColors.onSurface,
+      colorOpacity: 0.1,
+      child: Container(
+        height: 180,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: AppColors.surfaceContainerHighest,
+        ),
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 24,
+              width: 200,
+              decoration: BoxDecoration(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 16,
+              width: 120,
+              decoration: BoxDecoration(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 14,
+              width: 80,
+              decoration: BoxDecoration(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
