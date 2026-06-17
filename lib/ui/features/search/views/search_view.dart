@@ -157,7 +157,12 @@ class _SearchViewState extends State<SearchView> {
                 builder: (context, child) {
                   final state = widget.sitesViewModel.state;
                   if (state.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
+                    return ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
+                      itemCount: 5,
+                      separatorBuilder: (context, index) => const SizedBox(height: 20),
+                      itemBuilder: (context, index) => const HeritageCardSkeleton(),
+                    );
                   }
 
                   final sites = state.filteredSites;
