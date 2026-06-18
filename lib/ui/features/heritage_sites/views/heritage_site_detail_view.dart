@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -9,6 +10,7 @@ import '../../../../domain/models/weather_data.dart';
 import '../heritage_sites_dependencies.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
+import 'widgets/gemini_chat_bottom_sheet.dart';
 
 class HeritageSiteDetailView extends StatefulWidget {
   const HeritageSiteDetailView({
@@ -30,14 +32,20 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   late final WebViewController _mapController;
   bool _isLoadingWeather = true;
   WeatherData? _weatherData;
+  final FlutterTts _flutterTts = FlutterTts();
 
   @override
   void initState() {
     super.initState();
     _fetchWeather();
-    const String mapsApiKey = String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
-    
-    final htmlContent = '''
+    _initTts();
+    const String mapsApiKey = String.fromEnvironment(
+      'MAPS_API_KEY',
+      defaultValue: '',
+    );
+
+    final htmlContent =
+        '''
 <!DOCTYPE html>
 <html>
   <head>
@@ -79,13 +87,15 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
     try {
       final geometryRepo = HeritageSitesDependencies.createGeometryRepository();
-      final geometry = await geometryRepo.getSiteGeometry(widget.site.propertyId);
-      
+      final geometry = await geometryRepo.getSiteGeometry(
+        widget.site.propertyId,
+      );
+
       if (geometry != null && !geometry.boundary.isEmpty) {
         double sumLat = 0;
         double sumLng = 0;
         int count = 0;
-        
+
         for (final ring in geometry.boundary.rings) {
           for (final point in ring) {
             sumLat += point.latitude;
@@ -93,27 +103,60 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             count++;
           }
         }
-        
+
         if (count > 0) {
           targetLat = sumLat / count;
           targetLng = sumLng / count;
         }
       }
-    } catch (_) {
-      // Fallback to default coordinates on error
+    } catch (e) {
+      debugPrint('Error fetching weather: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingWeather = false;
+        });
+      }
     }
 
     final service = WeatherService();
-    final data = await service.fetchCurrentWeather(
-      targetLat,
-      targetLng,
-    );
+    final data = await service.fetchCurrentWeather(targetLat, targetLng);
     if (mounted) {
       setState(() {
         _weatherData = data;
         _isLoadingWeather = false;
       });
     }
+  }
+
+  void _initTts() async {
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setPitch(1.0);
+    
+    await _flutterTts.setSharedInstance(true);
+    await _flutterTts.setIosAudioCategory(
+      IosTextToSpeechAudioCategory.playback,
+      [
+        IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+        IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+        IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+      ],
+    );
+
+    _flutterTts.setCompletionHandler(() {
+      if (mounted) {
+        setState(() {
+          _isAudioPlaying = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _flutterTts.stop();
+    super.dispose();
   }
 
   @override
@@ -159,7 +202,10 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
-                            icon: const Icon(Icons.play_arrow_rounded, color: AppColors.onSurface),
+                            icon: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: AppColors.onSurface,
+                            ),
                             onPressed: () {
                               // Fly to location
                             },
@@ -169,17 +215,19 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // LG Connected Status
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: LgConnectionHeader(viewModel: widget.settingsViewModel),
+                  child: LgConnectionHeader(
+                    viewModel: widget.settingsViewModel,
+                  ),
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Title
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -191,9 +239,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Segmented Button
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -203,7 +251,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                         child: _buildTab(
                           title: 'Overview',
                           isSelected: _selectedTab == 'Overview',
-                          onTap: () => setState(() => _selectedTab = 'Overview'),
+                          onTap: () =>
+                              setState(() => _selectedTab = 'Overview'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -217,9 +266,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 if (_selectedTab == 'Overview') ...[
                   // Chips
                   Padding(
@@ -243,9 +292,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 8),
-                  
+
                   // Inscription Year Chip
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -254,14 +303,17 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                       label: 'Inscription Year: ${widget.site.dateInscribed}',
                     ),
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Explore Card
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(16),
@@ -292,13 +344,20 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                             ),
                             child: IconButton(
                               icon: Icon(
-                                _isAudioPlaying ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                                _isAudioPlaying
+                                    ? Icons.volume_up_rounded
+                                    : Icons.volume_off_rounded,
                                 color: AppColors.onSurface,
                               ),
                               onPressed: () {
                                 setState(() {
                                   _isAudioPlaying = !_isAudioPlaying;
                                 });
+                                if (_isAudioPlaying) {
+                                  _flutterTts.speak(widget.site.description);
+                                } else {
+                                  _flutterTts.stop();
+                                }
                               },
                             ),
                           ),
@@ -309,12 +368,12 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                 ] else ...[
                   _buildClimateTab(theme),
                 ],
-                
+
                 const SizedBox(height: 24), // Standard bottom padding
               ],
             ),
           ),
-          
+
           // Back Button
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
@@ -336,7 +395,14 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
           child: ElevatedButton.icon(
-            onPressed: () {},
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => GeminiChatBottomSheet(siteName: widget.site.name),
+              );
+            },
             icon: Image.asset(
               'assets/images/google_gemini_icon.png',
               width: 24,
@@ -362,20 +428,28 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
   }
 
-  Widget _buildTab({required String title, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildTab({
+    required String title,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.surfaceVariant : AppColors.surfaceContainerHighest,
+          color: isSelected
+              ? AppColors.surfaceVariant
+              : AppColors.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(20),
         ),
         alignment: Alignment.center,
         child: Text(
           title,
           style: TextStyle(
-            color: isSelected ? AppColors.onSurface : AppColors.onSurfaceVariant,
+            color: isSelected
+                ? AppColors.onSurface
+                : AppColors.onSurfaceVariant,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
@@ -446,10 +520,18 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
 
     final weather = _weatherData;
-    final tempValue = weather != null ? '${weather.temperature.round()} °C' : '-- °C';
-    final feelsLike = weather != null ? 'Feels like ${weather.feelsLike.round()}°C' : 'Feels like --°C';
-    final windValue = weather != null ? '${weather.windSpeed.round()} km/h' : '-- km/h';
-    final windDir = weather != null ? 'Direction: ${weather.windDirection}°' : 'Direction: --°';
+    final tempValue = weather != null
+        ? '${weather.temperature.round()} °C'
+        : '-- °C';
+    final feelsLike = weather != null
+        ? 'Feels like ${weather.feelsLike.round()}°C'
+        : 'Feels like --°C';
+    final windValue = weather != null
+        ? '${weather.windSpeed.round()} km/h'
+        : '-- km/h';
+    final windDir = weather != null
+        ? 'Direction: ${weather.windDirection}°'
+        : 'Direction: --°';
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,

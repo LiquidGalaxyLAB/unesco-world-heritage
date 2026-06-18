@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'ui/features/settings/views/settings_view.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 void main() {
-  runApp(const HeritageApp());
+  runApp(const ProviderScope(child: HeritageApp()));
 }
 
 class HeritageApp extends StatelessWidget {
