@@ -109,7 +109,7 @@ class _HomeViewState extends State<HomeView> {
                   // LG Connected Status
                   LgConnectionHeader(viewModel: widget.settingsViewModel),
                   const SizedBox(height: 16),
-                  
+                     
                   // Title
                   Text(
                     'Discover Sites Near You',
