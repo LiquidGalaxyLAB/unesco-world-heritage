@@ -70,32 +70,46 @@ class _HomeViewState extends State<HomeView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-            // Top Map Container
-            Container(
-              height: MediaQuery.of(context).size.height * 0.35,
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceContainerHigh,
-              ),
-              child: ClipRRect(
-                child: WebViewWidget(controller: _mapController),
-              ),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: MediaQuery.of(context).size.height * 0.30,
+            pinned: true,
+            flexibleSpace: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                var top = constraints.biggest.height;
+                var isCollapsed = top <= kToolbarHeight + MediaQuery.of(context).padding.top + 10;
+                
+                return FlexibleSpaceBar(
+                  title: isCollapsed
+                      ? const Text(
+                          'Unesco World Heritage',
+                          style: TextStyle(
+                            color: AppColors.onSurface,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        )
+                      : null,
+                  centerTitle: false,
+                  titlePadding: const EdgeInsetsDirectional.only(start: 24, bottom: 16),
+                  collapseMode: CollapseMode.parallax,
+                  background: WebViewWidget(controller: _mapController),
+                );
+              },
             ),
-            
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+            backgroundColor: AppColors.surfaceContainerHigh,
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   // LG Connected Status
                   LgConnectionHeader(viewModel: widget.settingsViewModel),
                   const SizedBox(height: 16),
-                  
+                     
                   // Title
                   Text(
                     'Discover Sites Near You',
@@ -171,9 +185,8 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
           ),
-        ),
-      ],
-    ),
+        ],
+      ),
     );
   }
 }
