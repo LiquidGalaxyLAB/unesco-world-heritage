@@ -65,109 +65,103 @@ class LGRigService {
 
   Future<void> setRefresh() async {
     final settings = _requireConnection();
-    final password = _shellQuote(settings.password);
+    final password = settings.password;
 
     for (var screen = 2; screen <= settings.screens; screen++) {
-      final href = '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\\/href>';
-      final refreshedHref =
-          '$href<refreshMode>onInterval<\\/refreshMode>'
-          '<refreshInterval>2<\\/refreshInterval>';
-      final remoteCommand =
-          'echo $password | sudo -S sed -i '
-          '"s/$refreshedHref/$href/; s/$href/$refreshedHref/" '
-          '~/earth/kml/slave/myplaces.kml';
+      final search = '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>';
+      final replace =
+          '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>'
+          '<refreshMode>onInterval<\/refreshMode>'
+          '<refreshInterval>2<\/refreshInterval>';
 
-      await _run(
-        'sshpass -p $password ssh -t lg$screen '
-        '${_shellQuote(remoteCommand)}',
+      await _client!.run(
+        'sshpass -p $password ssh -t lg$screen \'echo $password | sudo -S sed -i "s/$replace/$search/" ~/earth/kml/slave/myplaces.kml\'',
+      );
+      await _client!.run(
+        'sshpass -p $password ssh -t lg$screen \'echo $password | sudo -S sed -i "s/$search/$replace/" ~/earth/kml/slave/myplaces.kml\'',
       );
     }
   }
 
   Future<void> resetRefresh() async {
     final settings = _requireConnection();
-    final password = _shellQuote(settings.password);
+    final password = settings.password;
 
     for (var screen = 2; screen <= settings.screens; screen++) {
-      final href = '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\\/href>';
-      final refreshedHref =
-          '$href<refreshMode>onInterval<\\/refreshMode>'
-          '<refreshInterval>2<\\/refreshInterval>';
-      final remoteCommand =
-          'echo $password | sudo -S sed -i '
-          '"s/$refreshedHref/$href/" '
-          '~/earth/kml/slave/myplaces.kml';
+      final search =
+          '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>'
+          '<refreshMode>onInterval<\/refreshMode>'
+          '<refreshInterval>2<\/refreshInterval>';
+      final replace = '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>';
 
-      await _run(
-        'sshpass -p $password ssh -t lg$screen '
-        '${_shellQuote(remoteCommand)}',
+      await _client?.run(
+        'sshpass -p $password ssh -t lg$screen \'echo $password | sudo -S sed -i "s/$search/$replace/" ~/earth/kml/slave/myplaces.kml\'',
       );
     }
   }
 
   Future<void> relaunch() async {
     final settings = _requireConnection();
-    final password = _shellQuote(settings.password);
+    final password = settings.password;
 
-    await _run(
-      '${_shellQuote('/home/${settings.username}/bin/lg-relaunch')} '
-      '> ${_shellQuote('/home/${settings.username}/log.txt')} 2>&1',
+    await _client!.execute(
+      '"/home/${settings.username}/bin/lg-relaunch" > /home/${settings.username}/log.txt',
     );
 
     for (var screen = 1; screen <= settings.screens; screen++) {
-      final remoteCommand =
-          '''
-if [ -f /etc/init/lxdm.conf ]; then
-  SERVICE=lxdm
-elif [ -f /etc/init/lightdm.conf ]; then
-  SERVICE=lightdm
-else
-  exit 1
-fi
-if service "\$SERVICE" status 2>&1 | grep -q stop; then
-  echo $password | sudo -S service "\$SERVICE" start
-else
-  echo $password | sudo -S service "\$SERVICE" restart
-fi''';
+      final command =
+          """RELAUNCH_CMD="\\
+          if [ -f /etc/init/lxdm.conf ]; then
+            export SERVICE=lxdm
+          elif [ -f /etc/init/lightdm.conf ]; then
+            export SERVICE=lightdm
+          else
+            exit 1
+          fi
+          if  [[\\\$(service \\\$SERVICE status) =~ 'stop' ]]; then
+            echo $password | sudo -S service \\\${SERVICE} start
+          else
+            echo $password | sudo -S service \\\${SERVICE} restart
+          fi
+          " && sshpass -p $password ssh -x -t lg@lg$screen "\$RELAUNCH_CMD\"""";
 
-      await _run(
-        'sshpass -p $password ssh -x -t lg@lg$screen '
-        '${_shellQuote(remoteCommand)}',
-      );
+      await _client!.execute(command);
     }
   }
 
   Future<void> reboot() async {
     final settings = _requireConnection();
-    final password = _shellQuote(settings.password);
+    final password = settings.password;
 
     for (var screen = settings.screens; screen >= 1; screen--) {
-      final remoteCommand = 'echo $password | sudo -S reboot';
-      await _run(
-        'sshpass -p $password ssh -t lg$screen '
-        '${_shellQuote(remoteCommand)}',
+      await _client!.execute(
+        'sshpass -p $password ssh -t lg$screen "echo $password | sudo -S reboot"',
       );
     }
   }
 
   Future<void> powerOff() async {
     final settings = _requireConnection();
-    final password = _shellQuote(settings.password);
+    final password = settings.password;
 
     for (var screen = settings.screens; screen >= 1; screen--) {
-      final remoteCommand = 'echo $password | sudo -S poweroff';
-      await _run(
-        'sshpass -p $password ssh -t lg$screen '
-        '${_shellQuote(remoteCommand)}',
+      await _client!.execute(
+        'sshpass -p $password ssh -t lg$screen "echo $password | sudo -S poweroff"',
       );
     }
   }
 
   Future<void> clearKml() async {
-    await _run(
-      'echo "exittour=true" > /tmp/query.txt && '
-      ': > $_webRoot/kmls.txt',
-    );
+    final settings = _requireConnection();
+    String query =
+        'echo "exittour=true" > /tmp/query.txt && > $_webRoot/kmls.txt';
+
+    for (var screen = 2; screen <= settings.screens; screen++) {
+      final blankKml = KMLBuilder.generateBlankKml('slave_$screen');
+      query += " && echo '$blankKml' > $_slaveKmlDirectory/slave_$screen.kml";
+    }
+
+    await _client?.execute(query);
   }
 
   Future<void> clearKmlAndLogos() async {
@@ -178,17 +172,15 @@ fi''';
   Future<void> sendKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
     await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
-    await _run(
-      'printf "%s\\n" ${_shellQuote('$_lgBaseUrl/$safeFileName')} '
-      '> $_webRoot/kmls.txt',
+    await _client!.run(
+      'echo "\n$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt',
     );
   }
 
   Future<void> appendKml(String fileName) async {
     final safeFileName = _validateFileName(fileName);
-    await _run(
-      'printf "%s\\n" ${_shellQuote('$_lgBaseUrl/$safeFileName')} '
-      '>> $_webRoot/kmls.txt',
+    await _client!.run(
+      'echo "\n$_lgBaseUrl/$safeFileName" >> $_webRoot/kmls.txt',
     );
   }
 
@@ -202,10 +194,8 @@ fi''';
       );
     }
 
-    await _ensureSlaveKmlDirectory();
-    await _writeRemoteFile(
-      '$_slaveKmlDirectory/slave_$screen.kml',
-      utf8.encode(content.trim()),
+    await _client!.run(
+      "echo '${content.trim()}' > $_slaveKmlDirectory/slave_$screen.kml",
     );
   }
 
@@ -234,10 +224,7 @@ fi''';
       heading: bearing.toString(),
       altitudeMode: 'relativeToGround',
     );
-    await _run(
-      'printf "%s\\n" ${_shellQuote('flytoview=$lookAt')} '
-      '> /tmp/query.txt',
-    );
+    await _client!.run('echo "flytoview=$lookAt" > /tmp/query.txt');
   }
 
   Future<void> _showLogoOverlay() async {
@@ -253,7 +240,12 @@ fi''';
     );
     await _writeRemoteFile('$_webRoot/$_logoFileName', bytes);
 
-    final overlay = KMLBuilder.generateLogoKML();
+    final overlay = KMLBuilder.screenOverlayImage(
+      id: 'logo',
+      name: 'Logo',
+      imageUrl: '$_lgBaseUrl/$_logoFileName',
+      factor: 500 / 554,
+    );
     await sendKmlToSlave(_leftmostScreen(settings.screens), overlay);
   }
 
