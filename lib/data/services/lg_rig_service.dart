@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
-import '../../core/kml_builder.dart';
+import '../../core/utils/kml_builder.dart';
 import '../../domain/models/lg_connection_settings.dart';
 
 class LGRigService {
@@ -226,12 +226,13 @@ fi''';
     required double bearing,
   }) async {
     final lookAt = KMLBuilder.buildLinearLookAt(
-      latitude: latitude,
-      longitude: longitude,
-      altitude: altitude,
-      zoom: zoom,
-      tilt: tilt,
-      bearing: bearing,
+      lat: latitude,
+      lng: longitude,
+      altitude: altitude.toString(),
+      range: zoom.toString(),
+      tilt: tilt.toString(),
+      heading: bearing.toString(),
+      altitudeMode: 'relativeToGround',
     );
     await _run(
       'printf "%s\\n" ${_shellQuote('flytoview=$lookAt')} '
@@ -252,11 +253,7 @@ fi''';
     );
     await _writeRemoteFile('$_webRoot/$_logoFileName', bytes);
 
-    final overlay = KMLBuilder.buildScreenOverlay(
-      id: 'unesco_logo',
-      name: 'UNESCO World Heritage',
-      imageUrl: '$_lgBaseUrl/$_logoFileName',
-    );
+    final overlay = KMLBuilder.generateLogoKML();
     await sendKmlToSlave(_leftmostScreen(settings.screens), overlay);
   }
 
@@ -270,7 +267,7 @@ fi''';
     for (var screen = 2; screen <= settings.screens; screen++) {
       await _writeRemoteFile(
         '$_slaveKmlDirectory/slave_$screen.kml',
-        utf8.encode(KMLBuilder.buildBlank('slave_$screen')),
+        utf8.encode(KMLBuilder.generateBlankKml('slave_$screen')),
       );
     }
   }

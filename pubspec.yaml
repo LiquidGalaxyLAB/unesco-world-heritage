@@ -39,6 +39,10 @@ dependencies:
   shared_preferences: ^2.5.3
   shimmer_animation: ^2.2.2+1
   webview_flutter: ^4.14.0
+  google_generative_ai: ^0.4.7
+  flutter_riverpod: ^3.3.2
+  speech_to_text: ^7.4.0
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:
