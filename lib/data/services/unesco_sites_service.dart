@@ -121,8 +121,15 @@ class UnescoSitesService {
   }
 
   Future<UnescoSiteDto> _addMissingImage(UnescoSiteDto site) async {
-    if (site.mainImageUrl.isNotEmpty || site.imageUrls.isNotEmpty) {
+    if (site.mainImageUrl.isNotEmpty) {
       return site;
+    }
+
+    if (site.imageUrls.isNotEmpty) {
+      return site.copyWith(
+        mainImageUrl: site.imageUrls.first,
+        imageUrls: site.imageUrls,
+      );
     }
 
     final imageUrl = await _wikipediaImageService.fetchImageUrl(site.name);
