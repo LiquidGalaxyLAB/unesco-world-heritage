@@ -111,6 +111,62 @@ class KMLBuilder {
     return getKmlSkeleton(content, safeName);
   }
 
+  static String buildBoundaryKml({
+    required String name,
+    required List<List<List<double>>> rings,
+  }) {
+    const double extrusionHeight = 150;
+    final safeName = _escapeXml(name);
+    final normalizedRings = rings
+        .map(_normalizeRing)
+        .where((ring) => ring.length >= 4)
+        .toList(growable: false);
+
+    if (normalizedRings.isEmpty) {
+      return generateBlankKml(safeName);
+    }
+
+    final outerBoundary = _buildLinearRing(
+      normalizedRings.first,
+      altitude: extrusionHeight,
+    );
+    final innerBoundaries = normalizedRings
+        .skip(1)
+        .map(
+          (ring) =>
+              '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
+        )
+        .join();
+
+    final content =
+        '''
+    <Style id="site_boundary">
+      <LineStyle>
+        <color>ffebce87</color>
+        <width>4</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>88ebce87</color>
+      </PolyStyle>
+    </Style>
+    <Placemark>
+      <name>$safeName</name>
+      <styleUrl>#site_boundary</styleUrl>
+      <Polygon>
+        <extrude>1</extrude>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>$outerBoundary</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+        $innerBoundaries
+      </Polygon>
+    </Placemark>''';
+
+    return getKmlSkeleton(content, safeName);
+  }
+
   static String generateBlankKml(String name) {
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
@@ -406,5 +462,39 @@ class KMLBuilder {
         '<range>$range</range>'
         '${altitudeMode != null ? '<altitudeMode>$altitudeMode</altitudeMode>' : ''}'
         '</LookAt>';
+  }
+
+  static List<List<double>> _normalizeRing(List<List<double>> ring) {
+    if (ring.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    final normalizedRing = ring
+        .where((point) => point.length >= 2)
+        .map((point) => <double>[point[0], point[1]])
+        .toList(growable: true);
+
+    if (normalizedRing.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    final first = normalizedRing.first;
+    final last = normalizedRing.last;
+    if (first[0] != last[0] || first[1] != last[1]) {
+      normalizedRing.add(<double>[first[0], first[1]]);
+    }
+
+    return normalizedRing;
+  }
+
+  static String _buildLinearRing(
+    List<List<double>> ring, {
+    double altitude = 0,
+  }) {
+    return ring
+        .map(
+          (point) => '${point[1]},${point[0]},${altitude.toStringAsFixed(1)}',
+        )
+        .join(' ');
   }
 }

@@ -226,4 +226,85 @@ class SettingsViewModel extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  Future<void> renderKmlOnLiquidGalaxy({
+    required String fileName,
+    required String kml,
+    required double latitude,
+    required double longitude,
+    required double range,
+    double altitude = 150,
+    double tilt = 60,
+    double bearing = 0,
+  }) async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.clearMaster();
+      await _lgRigService.flyTo(
+        latitude: latitude,
+        longitude: longitude,
+        altitude: altitude,
+        zoom: range,
+        tilt: tilt,
+        bearing: bearing,
+      );
+      await _lgRigService.sendKml(fileName, kml);
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to render KML on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> renderKmlOnLeftmostScreen({
+    required String kml,
+    required double latitude,
+    required double longitude,
+    required double range,
+    double altitude = 150,
+    double tilt = 60,
+    double bearing = 0,
+  }) async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.flyTo(
+        latitude: latitude,
+        longitude: longitude,
+        altitude: altitude,
+        zoom: range,
+        tilt: tilt,
+        bearing: bearing,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await _lgRigService.sendKmlToLeftmostScreen(kml);
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to render KML on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
 }

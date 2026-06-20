@@ -68,11 +68,11 @@ class LGRigService {
     final password = settings.password;
 
     for (var screen = 2; screen <= settings.screens; screen++) {
-      final search = '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>';
+      final search = '<href>##LG_PHPIFACE##kml/slave_$screen.kml</href>';
       final replace =
-          '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>'
-          '<refreshMode>onInterval<\/refreshMode>'
-          '<refreshInterval>2<\/refreshInterval>';
+          '<href>##LG_PHPIFACE##kml/slave_$screen.kml</href>'
+          '<refreshMode>onInterval</refreshMode>'
+          '<refreshInterval>2</refreshInterval>';
 
       await _client!.run(
         'sshpass -p $password ssh -t lg$screen \'echo $password | sudo -S sed -i "s/$replace/$search/" ~/earth/kml/slave/myplaces.kml\'',
@@ -89,10 +89,10 @@ class LGRigService {
 
     for (var screen = 2; screen <= settings.screens; screen++) {
       final search =
-          '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>'
-          '<refreshMode>onInterval<\/refreshMode>'
-          '<refreshInterval>2<\/refreshInterval>';
-      final replace = '<href>##LG_PHPIFACE##kml\\/slave_$screen.kml<\/href>';
+          '<href>##LG_PHPIFACE##kml/slave_$screen.kml</href>'
+          '<refreshMode>onInterval</refreshMode>'
+          '<refreshInterval>2</refreshInterval>';
+      final replace = '<href>##LG_PHPIFACE##kml/slave_$screen.kml</href>';
 
       await _client?.run(
         'sshpass -p $password ssh -t lg$screen \'echo $password | sudo -S sed -i "s/$search/$replace/" ~/earth/kml/slave/myplaces.kml\'',
@@ -164,6 +164,10 @@ class LGRigService {
     await _client?.execute(query);
   }
 
+  Future<void> clearMaster() async {
+    await _run('echo "exittour=true" > /tmp/query.txt && > $_webRoot/kmls.txt');
+  }
+
   Future<void> clearKmlAndLogos() async {
     await clearKml();
     await _clearSlaveScreens();
@@ -194,9 +198,21 @@ class LGRigService {
       );
     }
 
-    await _client!.run(
-      "echo '${content.trim()}' > $_slaveKmlDirectory/slave_$screen.kml",
+    await _writeRemoteFile(
+      '$_slaveKmlDirectory/slave_$screen.kml',
+      utf8.encode(content.trim()),
     );
+  }
+
+  Future<void> sendKmlToLeftmostScreen(String content) async {
+    final settings = _requireConnection();
+    if (settings.screens < 2) {
+      throw const LGLocalConnectionError(
+        'At least 2 screens are required for leftmost screen rendering.',
+      );
+    }
+
+    await sendKmlToSlave(_leftmostScreen(settings.screens), content);
   }
 
   Future<void> startOrbit() async {
@@ -328,10 +344,6 @@ class LGRigService {
       throw ArgumentError.value(fileName, 'fileName', 'Invalid file name');
     }
     return normalized;
-  }
-
-  String _shellQuote(String value) {
-    return "'${value.replaceAll("'", r"'\''")}'";
   }
 }
 
