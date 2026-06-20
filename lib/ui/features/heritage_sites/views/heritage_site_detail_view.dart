@@ -1,11 +1,16 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../../core/utils/kml_builder.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/services/weather_service.dart';
 import '../../../../domain/models/heritage_site.dart';
+import '../../../../domain/models/heritage_site_geometry.dart';
+import '../../../../domain/repositories/unesco_site_geometry_repository.dart';
 import '../../../../domain/models/weather_data.dart';
 import '../heritage_sites_dependencies.dart';
 import '../../settings/view_models/settings_view_model.dart';
@@ -29,14 +34,18 @@ class HeritageSiteDetailView extends StatefulWidget {
 class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   String _selectedTab = 'Overview';
   bool _isAudioPlaying = false;
+  bool _isRenderingOnLg = false;
   late final WebViewController _mapController;
+  late final UnescoSiteGeometryRepository _geometryRepository;
   bool _isLoadingWeather = true;
   WeatherData? _weatherData;
+  Future<HeritageSiteGeometry?>? _siteGeometryFuture;
   final FlutterTts _flutterTts = FlutterTts();
 
   @override
   void initState() {
     super.initState();
+    _geometryRepository = HeritageSitesDependencies.createGeometryRepository();
     _fetchWeather();
     _initTts();
     const String mapsApiKey = String.fromEnvironment(
@@ -86,28 +95,14 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     double targetLng = widget.site.longitude;
 
     try {
-      final geometryRepo = HeritageSitesDependencies.createGeometryRepository();
-      final geometry = await geometryRepo.getSiteGeometry(
-        widget.site.propertyId,
-      );
+      final geometry = await _getSiteGeometry();
 
       if (geometry != null && !geometry.boundary.isEmpty) {
-        double sumLat = 0;
-        double sumLng = 0;
-        int count = 0;
-
-        for (final ring in geometry.boundary.rings) {
-          for (final point in ring) {
-            sumLat += point.latitude;
-            sumLng += point.longitude;
-            count++;
-          }
-        }
-
-        if (count > 0) {
-          targetLat = sumLat / count;
-          targetLng = sumLng / count;
-        }
+        final center = _calculateGeometryCenter(
+          _calculateGeometryBounds(geometry.boundary),
+        );
+        targetLat = center.latitude;
+        targetLng = center.longitude;
       }
     } catch (e) {
       debugPrint('Error fetching weather: $e');
@@ -128,21 +123,127 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
   }
 
+  Future<HeritageSiteGeometry?> _getSiteGeometry() {
+    return _siteGeometryFuture ??= _geometryRepository.getSiteGeometry(
+      widget.site.propertyId,
+    );
+  }
+
+  Future<void> _handlePlayPressed() async {
+    if (_isRenderingOnLg) {
+      return;
+    }
+
+    if (!widget.settingsViewModel.state.isConnected) {
+      _showSnackBar('Connect to Liquid Galaxy first.');
+      return;
+    }
+
+    setState(() {
+      _isRenderingOnLg = true;
+    });
+
+    try {
+      final geometry = await _getSiteGeometry();
+      if (geometry == null || geometry.boundary.isEmpty) {
+        _showSnackBar('No boundary geometry available for this site.');
+        return;
+      }
+
+      final boundaryKml = KMLBuilder.buildBoundaryKml(
+        name: widget.site.name,
+        rings: geometry.boundary.rings
+            .map(
+              (ring) => ring
+                  .map((point) => <double>[point.latitude, point.longitude])
+                  .toList(growable: false),
+            )
+            .toList(growable: false),
+      );
+
+      await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
+        fileName: 'site_${widget.site.propertyId}.kml',
+        kml: boundaryKml,
+        latitude: widget.site.latitude,
+        longitude: widget.site.longitude,
+        range: 12000,
+      );
+    } catch (error) {
+      _showSnackBar(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRenderingOnLg = false;
+        });
+      }
+    }
+  }
+
+  _GeometryBounds _calculateGeometryBounds(HeritagePolygonGeometry geometry) {
+    if (geometry.rings.isEmpty) {
+      return _GeometryBounds.empty();
+    }
+
+    double minLat = double.infinity;
+    double maxLat = double.negativeInfinity;
+    double minLng = double.infinity;
+    double maxLng = double.negativeInfinity;
+
+    for (final ring in geometry.rings) {
+      for (final point in ring) {
+        minLat = math.min(minLat, point.latitude);
+        maxLat = math.max(maxLat, point.latitude);
+        minLng = math.min(minLng, point.longitude);
+        maxLng = math.max(maxLng, point.longitude);
+      }
+    }
+
+    if (!minLat.isFinite || !minLng.isFinite) {
+      return _GeometryBounds.empty();
+    }
+
+    return _GeometryBounds(
+      minLatitude: minLat,
+      maxLatitude: maxLat,
+      minLongitude: minLng,
+      maxLongitude: maxLng,
+    );
+  }
+
+  _LatLngCenter _calculateGeometryCenter(_GeometryBounds bounds) {
+    if (!bounds.isValid) {
+      return _LatLngCenter(widget.site.latitude, widget.site.longitude);
+    }
+
+    return _LatLngCenter(
+      (bounds.minLatitude + bounds.maxLatitude) / 2,
+      (bounds.minLongitude + bounds.maxLongitude) / 2,
+    );
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   void _initTts() async {
     await _flutterTts.setLanguage("en-US");
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setPitch(1.0);
-    
+
     await _flutterTts.setSharedInstance(true);
-    await _flutterTts.setIosAudioCategory(
-      IosTextToSpeechAudioCategory.playback,
-      [
-        IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-        IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-        IosTextToSpeechAudioCategoryOptions.mixWithOthers,
-      ],
-    );
+    await _flutterTts
+        .setIosAudioCategory(IosTextToSpeechAudioCategory.playback, [
+          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+          IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+        ]);
 
     _flutterTts.setCompletionHandler(() {
       if (mounted) {
@@ -202,13 +303,15 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
-                            icon: const Icon(
-                              Icons.play_arrow_rounded,
+                            icon: Icon(
+                              _isRenderingOnLg
+                                  ? Icons.hourglass_top_rounded
+                                  : Icons.play_arrow_rounded,
                               color: AppColors.onSurface,
                             ),
-                            onPressed: () {
-                              // Fly to location
-                            },
+                            onPressed: _isRenderingOnLg
+                                ? null
+                                : _handlePlayPressed,
                           ),
                         ),
                       ),
@@ -319,7 +422,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.black.withValues(alpha: 0.3),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -400,7 +503,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                 context: context,
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
-                builder: (context) => GeminiChatBottomSheet(siteName: widget.site.name),
+                builder: (context) =>
+                    GeminiChatBottomSheet(siteName: widget.site.name),
               );
             },
             icon: Image.asset(
@@ -411,7 +515,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             label: const Text('Ask Gemini'),
             style: ElevatedButton.styleFrom(
               elevation: 4,
-              shadowColor: Colors.black.withOpacity(0.3),
+              shadowColor: Colors.black.withValues(alpha: 0.3),
               backgroundColor: AppColors.surfaceContainerHighest,
               foregroundColor: AppColors.onSurface,
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -581,7 +685,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -633,4 +737,37 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       ),
     );
   }
+}
+
+class _LatLngCenter {
+  const _LatLngCenter(this.latitude, this.longitude);
+
+  final double latitude;
+  final double longitude;
+}
+
+class _GeometryBounds {
+  const _GeometryBounds({
+    required this.minLatitude,
+    required this.maxLatitude,
+    required this.minLongitude,
+    required this.maxLongitude,
+  });
+
+  const _GeometryBounds.empty()
+    : minLatitude = double.nan,
+      maxLatitude = double.nan,
+      minLongitude = double.nan,
+      maxLongitude = double.nan;
+
+  final double minLatitude;
+  final double maxLatitude;
+  final double minLongitude;
+  final double maxLongitude;
+
+  bool get isValid =>
+      minLatitude.isFinite &&
+      maxLatitude.isFinite &&
+      minLongitude.isFinite &&
+      maxLongitude.isFinite;
 }
