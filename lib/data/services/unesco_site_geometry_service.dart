@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/unesco_site_geometry_dto.dart';
+import '../models/wdpa_site_candidate_dto.dart';
 import 'unesco_api_exceptions.dart';
 
 enum UnescoGeometryLayer {
@@ -22,6 +23,7 @@ class UnescoSiteGeometryService {
       'https://services6.arcgis.com/eMd5K6XXEvJETxfQ/ArcGIS/rest/services/prd_whc_sites_dossiers_elements_v2_view/FeatureServer';
   static const String _wdpaNaturalSitesEndpoint =
       'https://services5.arcgis.com/Mj0hjvkNtV7NRhA7/ArcGIS/rest/services/WDPA_v0/FeatureServer/1/query';
+  static const int _wdpaPageSize = 2000;
 
   final http.Client _client;
 
@@ -39,18 +41,33 @@ class UnescoSiteGeometryService {
     );
   }
 
-  Future<List<UnescoSiteGeometryDto>> fetchWdpaNaturalSiteGeometries({
-    required String siteName,
-    required String isoCodes,
-  }) async {
-    final normalizedName = siteName.trim();
-    if (normalizedName.isEmpty) {
-      return const <UnescoSiteGeometryDto>[];
+  Future<List<WdpaSiteCandidateDto>> fetchWdpaSiteCandidates() async {
+    final candidates = <WdpaSiteCandidateDto>[];
+    for (var offset = 0; ; offset += _wdpaPageSize) {
+      final json = await _getJson(_buildWdpaCandidatesUri(offset: offset));
+      final page = _parseWdpaCandidates(json);
+      if (page.isEmpty) {
+        break;
+      }
+
+      candidates.addAll(page);
+      if (page.length < _wdpaPageSize &&
+          json['exceededTransferLimit'] != true) {
+        break;
+      }
     }
 
-    final json = await _getJson(
-      _buildWdpaUri(siteName: normalizedName, isoCodes: isoCodes),
-    );
+    final uniqueCandidates = <int, WdpaSiteCandidateDto>{};
+    for (final candidate in candidates) {
+      uniqueCandidates[candidate.siteId] = candidate;
+    }
+    return uniqueCandidates.values.toList(growable: false);
+  }
+
+  Future<List<UnescoSiteGeometryDto>> fetchWdpaGeometryBySiteId(
+    int siteId,
+  ) async {
+    final json = await _getJson(_buildWdpaGeometryUri(siteId));
     return _parseFeatures(json);
   }
 
@@ -77,77 +94,32 @@ class UnescoSiteGeometryService {
     );
   }
 
-  Uri _buildWdpaUri({required String siteName, required String isoCodes}) {
-    final nameTokens = _buildSearchTokens(siteName);
-    final nameWhere = nameTokens
-        .map(
-          (token) =>
-              "(UPPER(name_eng) LIKE '%${_escapeSql(token.toUpperCase())}%' "
-              "OR UPPER(name) LIKE '%${_escapeSql(token.toUpperCase())}%')",
-        )
-        .join(' AND ');
-    final isoWhere = _buildIsoWhere(isoCodes);
-    final where = <String>[
-      "(UPPER(desig_eng) LIKE '%WORLD HERITAGE%')",
-      if (nameWhere.isNotEmpty) nameWhere,
-      if (isoWhere.isNotEmpty) isoWhere,
-    ].join(' AND ');
-
+  Uri _buildWdpaCandidatesUri({required int offset}) {
     return Uri.parse(_wdpaNaturalSitesEndpoint).replace(
       queryParameters: <String, String>{
         'f': 'json',
-        'where': where,
-        'outFields': 'site_id,name_eng,name,desig_eng,iso3',
+        'where': "desig_type='International'",
+        'outFields': 'site_id,name_eng,name',
+        'outSR': '4326',
+        'returnGeometry': 'false',
+        'resultOffset': '$offset',
+        'resultRecordCount': '$_wdpaPageSize',
+      },
+    );
+  }
+
+  Uri _buildWdpaGeometryUri(int siteId) {
+    return Uri.parse(_wdpaNaturalSitesEndpoint).replace(
+      queryParameters: <String, String>{
+        'f': 'json',
+        'where': 'site_id=$siteId',
+        'outFields': 'site_id',
         'outSR': '4326',
         'returnGeometry': 'true',
         'resultRecordCount': '2000',
       },
     );
   }
-
-  List<String> _buildSearchTokens(String siteName) {
-    final words = siteName
-        .replaceAll(RegExp(r'[^A-Za-z0-9 -]'), ' ')
-        .split(RegExp(r'\s+'))
-        .map((word) => word.trim())
-        .where((word) => word.length >= 4)
-        .where(
-          (word) => !const <String>{
-            'the',
-            'and',
-            'site',
-            'heritage',
-            'world',
-            'national',
-            'park',
-          }.contains(word.toLowerCase()),
-        )
-        .toList(growable: false);
-
-    if (words.isEmpty) {
-      return <String>[siteName];
-    }
-
-    return words.take(3).toList(growable: false);
-  }
-
-  String _buildIsoWhere(String isoCodes) {
-    final codes = isoCodes
-        .split(RegExp(r'[,; ]+'))
-        .map((code) => code.trim().toUpperCase())
-        .where((code) => code.length >= 2)
-        .toList(growable: false);
-    if (codes.isEmpty) {
-      return '';
-    }
-
-    final clauses = codes
-        .map((code) => "UPPER(iso3) LIKE '%${_escapeSql(code)}%'")
-        .join(' OR ');
-    return '($clauses)';
-  }
-
-  String _escapeSql(String value) => value.replaceAll("'", "''");
 
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
     http.Response response;
@@ -197,5 +169,31 @@ class UnescoSiteGeometryService {
         'Unable to parse UNESCO geometry: $error',
       );
     }
+  }
+
+  List<WdpaSiteCandidateDto> _parseWdpaCandidates(Map<String, dynamic> json) {
+    final features = json['features'];
+    if (features is! List) {
+      throw const UnescoSitesParseException(
+        'WDPA response is missing features.',
+      );
+    }
+
+    final candidates = <WdpaSiteCandidateDto>[];
+    for (final feature in features) {
+      if (feature is! Map) {
+        continue;
+      }
+
+      try {
+        candidates.add(
+          WdpaSiteCandidateDto.fromFeature(Map<String, dynamic>.from(feature)),
+        );
+      } on FormatException {
+        continue;
+      }
+    }
+
+    return candidates;
   }
 }

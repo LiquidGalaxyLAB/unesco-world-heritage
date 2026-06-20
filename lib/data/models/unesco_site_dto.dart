@@ -50,7 +50,8 @@ class UnescoSiteDto {
           '',
       dateInscribed:
           _readString(record, const <String>['date_inscribed']) ?? '',
-      mainImageUrl: _readString(record, const <String>['main_image_url']) ?? '',
+      mainImageUrl:
+          _readImageUrl(record, const <String>['main_image_url']) ?? '',
       imageUrls: _readImageUrls(record),
       region: _readString(record, const <String>['region', 'region_en']) ?? '',
       isDanger:
@@ -130,7 +131,7 @@ class UnescoSiteDto {
           ]) ??
           '',
       mainImageUrl:
-          _readString(attributes, const <String>['main_image_url']) ?? '',
+          _readImageUrl(attributes, const <String>['main_image_url']) ?? '',
       imageUrls: _readImageUrls(attributes),
       region:
           _readString(attributes, const <String>[
@@ -339,7 +340,7 @@ class UnescoSiteDto {
 
   static List<String> _readImageUrls(Map<String, dynamic> map) {
     final urls = <String>{};
-    final mainImageUrl = _readString(map, const <String>['main_image_url']);
+    final mainImageUrl = _readImageUrl(map, const <String>['main_image_url']);
     if (mainImageUrl != null) {
       urls.add(mainImageUrl);
     }
@@ -347,21 +348,62 @@ class UnescoSiteDto {
     final imagesUrls = map['images_urls'];
     if (imagesUrls is String) {
       for (final url in imagesUrls.split(',')) {
-        final trimmedUrl = url.trim();
-        if (trimmedUrl.isNotEmpty) {
-          urls.add(trimmedUrl);
+        final normalizedUrl = _normalizeImageUrl(url);
+        if (normalizedUrl != null) {
+          urls.add(normalizedUrl);
         }
       }
     } else if (imagesUrls is List) {
       for (final url in imagesUrls) {
-        final trimmedUrl = url.toString().trim();
-        if (trimmedUrl.isNotEmpty) {
-          urls.add(trimmedUrl);
+        final normalizedUrl = _normalizeImageUrl(url);
+        if (normalizedUrl != null) {
+          urls.add(normalizedUrl);
         }
       }
     }
 
     return List<String>.unmodifiable(urls);
+  }
+
+  static String? _readImageUrl(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final normalizedUrl = _normalizeImageUrl(map[key]);
+      if (normalizedUrl != null) {
+        return normalizedUrl;
+      }
+    }
+    return null;
+  }
+
+  static String? _normalizeImageUrl(Object? value) {
+    if (value == null) {
+      return null;
+    }
+
+    final rawValue = value.toString().trim();
+    if (rawValue.isEmpty) {
+      return null;
+    }
+
+    final lowered = rawValue.toLowerCase();
+    if (lowered == 'null' || lowered == 'none' || lowered == 'n/a') {
+      return null;
+    }
+
+    final normalizedValue = rawValue.startsWith('//')
+        ? 'https:$rawValue'
+        : rawValue;
+    final uri = Uri.tryParse(normalizedValue);
+    if (uri == null || !uri.hasScheme) {
+      return null;
+    }
+
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') {
+      return null;
+    }
+
+    return normalizedValue;
   }
 }
 

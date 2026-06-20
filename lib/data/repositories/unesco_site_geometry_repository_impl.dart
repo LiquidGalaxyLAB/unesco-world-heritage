@@ -1,7 +1,10 @@
 import '../../domain/models/heritage_site_geometry.dart';
 import '../../domain/repositories/unesco_site_geometry_repository.dart';
+import 'package:string_similarity/string_similarity.dart';
+
 import '../models/unesco_site_dto.dart';
 import '../models/unesco_site_geometry_dto.dart';
+import '../models/wdpa_site_candidate_dto.dart';
 import '../services/gemini_geometry_service.dart';
 import '../services/unesco_api_exceptions.dart';
 import '../services/unesco_site_geometry_service.dart';
@@ -18,8 +21,10 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
   final UnescoSiteGeometryService _service;
   final UnescoSitesService? _sitesService;
   final GeminiGeometryService? _geminiGeometryService;
+  Future<List<WdpaSiteCandidateDto>>? _wdpaCandidatesFuture;
   final Map<int, HeritageSiteGeometry> _cachedGeometries =
       <int, HeritageSiteGeometry>{};
+  static const double _wdpaMatchThreshold = 0.75;
 
   @override
   Future<HeritageSiteGeometry?> getSiteGeometry(int propertyId) async {
@@ -49,17 +54,8 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
 
     final site = await _fetchSite(propertyId);
     if (site != null && _isNaturalOrMixed(site.rawCategory)) {
-      final wdpaGeometries = await _fetchOrEmpty(
-        () => _service.fetchWdpaNaturalSiteGeometries(
-          siteName: site.name,
-          isoCodes: site.isoCodes,
-        ),
-      );
-      if (wdpaGeometries.isNotEmpty) {
-        final geometry = HeritageSiteGeometry(
-          propertyId: propertyId,
-          boundary: _mapPolygon(wdpaGeometries),
-        );
+      final geometry = await _fetchWdpaGeometry(site, propertyId);
+      if (geometry != null) {
         _cachedGeometries[propertyId] = geometry;
         return geometry;
       }
@@ -107,6 +103,7 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
   @override
   Future<void> refresh() async {
     _cachedGeometries.clear();
+    _wdpaCandidatesFuture = null;
   }
 
   Future<List<UnescoSiteGeometryDto>> _fetchOrEmpty(
@@ -137,6 +134,103 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
     return category == 'natural' || category == 'mixed';
   }
 
+  Future<HeritageSiteGeometry?> _fetchWdpaGeometry(
+    UnescoSiteDto site,
+    int propertyId,
+  ) async {
+    final candidates = await _fetchWdpaCandidates();
+    if (candidates.isEmpty) {
+      return null;
+    }
+
+    final matchedCandidate = _findBestWdpaCandidate(site.name, candidates);
+    if (matchedCandidate == null) {
+      return null;
+    }
+
+    final geometries = await _fetchOrEmpty(
+      () => _service.fetchWdpaGeometryBySiteId(matchedCandidate.siteId),
+    );
+    if (geometries.isEmpty) {
+      return null;
+    }
+
+    return HeritageSiteGeometry(
+      propertyId: propertyId,
+      boundary: _mapPolygon(geometries),
+    );
+  }
+
+  Future<List<WdpaSiteCandidateDto>> _fetchWdpaCandidates() async {
+    final existingFuture = _wdpaCandidatesFuture;
+    if (existingFuture != null) {
+      return existingFuture;
+    }
+
+    final future = _fetchWdpaCandidatesInternal();
+    _wdpaCandidatesFuture = future;
+    return future;
+  }
+
+  Future<List<WdpaSiteCandidateDto>> _fetchWdpaCandidatesInternal() async {
+    try {
+      return await _service.fetchWdpaSiteCandidates();
+    } on UnescoSitesException {
+      _wdpaCandidatesFuture = null;
+      return const <WdpaSiteCandidateDto>[];
+    }
+  }
+
+  WdpaSiteCandidateDto? _findBestWdpaCandidate(
+    String siteName,
+    List<WdpaSiteCandidateDto> candidates,
+  ) {
+    final normalizedSiteName = _normalizeName(siteName);
+    if (normalizedSiteName.isEmpty) {
+      return null;
+    }
+
+    final aliases = <_WdpaCandidateAlias>[];
+    for (final candidate in candidates) {
+      final normalizedAliases = <String>{
+        _normalizeName(candidate.nameEnglish),
+        _normalizeName(candidate.name),
+      }..removeWhere((value) => value.isEmpty);
+
+      for (final alias in normalizedAliases) {
+        aliases.add(_WdpaCandidateAlias(candidate: candidate, alias: alias));
+      }
+    }
+
+    if (aliases.isEmpty) {
+      return null;
+    }
+
+    final match = StringSimilarity.findBestMatch(
+      normalizedSiteName,
+      aliases.map((alias) => alias.alias).toList(growable: false),
+    );
+    final rating = match.bestMatch.rating ?? 0;
+    if (rating < _wdpaMatchThreshold) {
+      return null;
+    }
+
+    return aliases[match.bestMatchIndex].candidate;
+  }
+
+  String _normalizeName(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(
+          RegExp(r'</?(strong|b|em|i|mark|code)\b[^>]*>', caseSensitive: false),
+          ' ',
+        )
+        .replaceAll(RegExp(r'&[^;\s]+;'), ' ')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   HeritagePolygonGeometry _mapPolygon(List<UnescoSiteGeometryDto> dtos) {
     return HeritagePolygonGeometry(
       rings: dtos
@@ -153,4 +247,11 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
         )
         .toList(growable: false);
   }
+}
+
+class _WdpaCandidateAlias {
+  const _WdpaCandidateAlias({required this.candidate, required this.alias});
+
+  final WdpaSiteCandidateDto candidate;
+  final String alias;
 }
