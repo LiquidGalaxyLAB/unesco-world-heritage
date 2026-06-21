@@ -30,6 +30,19 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
   }
 
   @override
+  Future<List<HeritageSite>> getSitesPage({int offset = 0}) async {
+    final dtos = await _service.fetchSitesPage(offset: offset);
+    final sitesById = <int, HeritageSite>{};
+    for (final dto in dtos) {
+      sitesById[dto.propertyId] = _mapToDomain(dto);
+    }
+
+    return List<HeritageSite>.unmodifiable(
+      sitesById.values.toList(growable: false),
+    );
+  }
+
+  @override
   Future<HeritageSite?> getSiteById(int propertyId) async {
     final cachedSites = _cachedSites;
     if (cachedSites != null) {
