@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../../domain/models/heritage_site.dart';
@@ -7,21 +9,29 @@ import 'heritage_sites_state.dart';
 class HeritageSitesViewModel extends ChangeNotifier {
   HeritageSitesViewModel(this._repository);
 
+  static const int _initialPageOffset = 0;
   final UnescoSitesRepository _repository;
+  Future<void>? _backgroundLoadFuture;
 
   HeritageSitesState _state = const HeritageSitesState(isLoading: true);
   HeritageSitesState get state => _state;
 
   Future<void> loadSites() async {
+    if (_backgroundLoadFuture != null && _state.sites.isNotEmpty) {
+      return;
+    }
+
     _state = _state.copyWith(isLoading: true, clearError: true);
     notifyListeners();
 
     try {
-      final sites = await _repository.getAllSites();
+      final initialSites = await _repository.getSitesPage(
+        offset: _initialPageOffset,
+      );
       _state = _state.copyWith(
-        sites: sites,
+        sites: initialSites,
         filteredSites: _filterSites(
-          sites: sites,
+          sites: initialSites,
           query: _state.searchQuery,
           regions: _state.selectedRegions,
           states: _state.selectedStates,
@@ -32,6 +42,9 @@ class HeritageSitesViewModel extends ChangeNotifier {
         ),
         isLoading: false,
       );
+      notifyListeners();
+
+      _backgroundLoadFuture ??= _loadRemainingSites();
     } catch (_) {
       _state = _state.copyWith(
         isLoading: false,
@@ -43,6 +56,7 @@ class HeritageSitesViewModel extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
+    _backgroundLoadFuture = null;
     _state = _state.copyWith(isLoading: true, clearError: true);
     notifyListeners();
 
@@ -71,6 +85,33 @@ class HeritageSitesViewModel extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  Future<void> _loadRemainingSites() async {
+    try {
+      final sites = await _repository.getAllSites();
+      _state = _state.copyWith(
+        sites: sites,
+        filteredSites: _filterSites(
+          sites: sites,
+          query: _state.searchQuery,
+          regions: _state.selectedRegions,
+          states: _state.selectedStates,
+          categories: _state.selectedCategories,
+          startYear: _state.startYear,
+          endYear: _state.endYear,
+          showDangerSites: _state.showDangerSites,
+        ),
+      );
+      notifyListeners();
+    } catch (_) {
+      if (_state.sites.isEmpty) {
+        _state = _state.copyWith(
+          errorMessage: 'Failed to load UNESCO heritage sites.',
+        );
+        notifyListeners();
+      }
+    }
   }
 
   void search(String query) {
@@ -153,43 +194,48 @@ class HeritageSitesViewModel extends ChangeNotifier {
     required int? endYear,
     required bool showDangerSites,
   }) {
-    return sites.where((site) {
-      if (query.isNotEmpty) {
-        final normalizedQuery = query.trim().toLowerCase();
-        if (!site.name.toLowerCase().contains(normalizedQuery) &&
-            !site.country.toLowerCase().contains(normalizedQuery)) {
-          return false;
-        }
-      }
+    return sites
+        .where((site) {
+          if (query.isNotEmpty) {
+            final normalizedQuery = query.trim().toLowerCase();
+            if (!site.name.toLowerCase().contains(normalizedQuery) &&
+                !site.country.toLowerCase().contains(normalizedQuery)) {
+              return false;
+            }
+          }
 
-      if (regions.isNotEmpty && !regions.contains(site.region)) {
-        return false;
-      }
+          if (regions.isNotEmpty && !regions.contains(site.region)) {
+            return false;
+          }
 
-      if (states.isNotEmpty) {
-        final siteStates = site.country.split(',').map((s) => s.trim()).toList();
-        if (!siteStates.any((s) => states.contains(s))) {
-          return false;
-        }
-      }
+          if (states.isNotEmpty) {
+            final siteStates = site.country
+                .split(',')
+                .map((s) => s.trim())
+                .toList();
+            if (!siteStates.any((s) => states.contains(s))) {
+              return false;
+            }
+          }
 
-      if (categories.isNotEmpty && !categories.contains(site.category)) {
-        return false;
-      }
+          if (categories.isNotEmpty && !categories.contains(site.category)) {
+            return false;
+          }
 
-      if (startYear != null || endYear != null) {
-        final year = int.tryParse(site.dateInscribed);
-        if (year != null) {
-          if (startYear != null && year < startYear) return false;
-          if (endYear != null && year > endYear) return false;
-        }
-      }
+          if (startYear != null || endYear != null) {
+            final year = int.tryParse(site.dateInscribed);
+            if (year != null) {
+              if (startYear != null && year < startYear) return false;
+              if (endYear != null && year > endYear) return false;
+            }
+          }
 
-      if (showDangerSites && !site.isDanger) {
-        return false;
-      }
+          if (showDangerSites && !site.isDanger) {
+            return false;
+          }
 
-      return true;
-    }).toList(growable: false);
+          return true;
+        })
+        .toList(growable: false);
   }
 }

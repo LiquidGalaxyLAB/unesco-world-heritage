@@ -22,14 +22,22 @@ class HomeView extends StatefulWidget {
 }
 
 class _HomeViewState extends State<HomeView> {
+  static const int _pageSize = 10;
+
   late final WebViewController _mapController;
+  final ScrollController _scrollController = ScrollController();
+  int _visibleSiteCount = _pageSize;
 
   @override
   void initState() {
     super.initState();
-    const String mapsApiKey = String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
-    
-    final htmlContent = '''
+    const String mapsApiKey = String.fromEnvironment(
+      'MAPS_API_KEY',
+      defaultValue: '',
+    );
+
+    final htmlContent =
+        '''
 <!DOCTYPE html>
 <html>
   <head>
@@ -62,15 +70,44 @@ class _HomeViewState extends State<HomeView> {
     _mapController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..loadHtmlString(htmlContent);
+
+    _scrollController.addListener(_loadNextPage);
   }
 
-  String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+  String _capitalize(String s) =>
+      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_loadNextPage)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _loadNextPage() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.extentAfter > 400) {
+      return;
+    }
+
+    final siteCount = widget.sitesViewModel.state.sites.length;
+    if (_visibleSiteCount >= siteCount) {
+      return;
+    }
+
+    setState(() {
+      final nextPageSize = _visibleSiteCount + _pageSize;
+      _visibleSiteCount = nextPageSize < siteCount ? nextPageSize : siteCount;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           SliverAppBar(
             expandedHeight: MediaQuery.of(context).size.height * 0.30,
@@ -78,8 +115,10 @@ class _HomeViewState extends State<HomeView> {
             flexibleSpace: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
                 var top = constraints.biggest.height;
-                var isCollapsed = top <= kToolbarHeight + MediaQuery.of(context).padding.top + 10;
-                
+                var isCollapsed =
+                    top <=
+                    kToolbarHeight + MediaQuery.of(context).padding.top + 10;
+
                 return FlexibleSpaceBar(
                   title: isCollapsed
                       ? const Text(
@@ -92,7 +131,10 @@ class _HomeViewState extends State<HomeView> {
                         )
                       : null,
                   centerTitle: false,
-                  titlePadding: const EdgeInsetsDirectional.only(start: 24, bottom: 16),
+                  titlePadding: const EdgeInsetsDirectional.only(
+                    start: 24,
+                    bottom: 16,
+                  ),
                   collapseMode: CollapseMode.parallax,
                   background: WebViewWidget(controller: _mapController),
                 );
@@ -109,53 +151,63 @@ class _HomeViewState extends State<HomeView> {
                   // LG Connected Status
                   LgConnectionHeader(viewModel: widget.settingsViewModel),
                   const SizedBox(height: 16),
-                     
+
                   // Title
                   Text(
                     'Discover Sites Near You',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: AppColors.onSurface,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      color: AppColors.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Heritage Cards List
                   ListenableBuilder(
                     listenable: widget.sitesViewModel,
                     builder: (context, _) {
                       final state = widget.sitesViewModel.state;
-                      
+
                       if (state.isLoading) {
                         return ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           padding: EdgeInsets.zero,
                           itemCount: 5,
-                          separatorBuilder: (context, index) => const SizedBox(height: 16),
-                          itemBuilder: (context, index) => const HeritageCardSkeleton(),
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 16),
+                          itemBuilder: (context, index) =>
+                              const HeritageCardSkeleton(),
                         );
                       }
-                      
+
                       if (state.sites.isEmpty) {
                         return const Center(child: Text('No sites available.'));
                       }
-                      
-                      // For now, take first few sites as placeholder for nearest sites
-                      final displaySites = state.sites.take(5).toList();
-                      
+
+                      final visibleSiteCount =
+                          _visibleSiteCount < state.sites.length
+                          ? _visibleSiteCount
+                          : state.sites.length;
+                      final displaySites = state.sites
+                          .take(visibleSiteCount)
+                          .toList(growable: false);
+
                       return ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         padding: EdgeInsets.zero,
                         itemCount: displaySites.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 16),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 16),
                         itemBuilder: (context, index) {
                           final site = displaySites[index];
                           // Dummy distance logic for UI
                           final dummyDistances = [100, 180, 250, 310, 420];
-                          final distance = index < dummyDistances.length ? dummyDistances[index] : (index + 1) * 80;
-                          
+                          final distance = index < dummyDistances.length
+                              ? dummyDistances[index]
+                              : (index + 1) * 80;
+
                           return GestureDetector(
                             onTap: () {
                               Navigator.of(context).push(
@@ -178,7 +230,17 @@ class _HomeViewState extends State<HomeView> {
                       );
                     },
                   ),
-                  
+
+                  if (_visibleSiteCount <
+                      widget.sitesViewModel.state.sites.length) ...[
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+
                   // Extra padding for bottom nav bar
                   const SizedBox(height: 100),
                 ],
