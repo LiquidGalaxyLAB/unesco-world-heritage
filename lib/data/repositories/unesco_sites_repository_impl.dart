@@ -69,7 +69,10 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
     if (cachedSites != null) {
       for (final site in cachedSites) {
         if (site.propertyId == propertyId) {
-          return site;
+          if (site.mainImageUrl.isNotEmpty && site.shortDescription.isNotEmpty) {
+            return site;
+          }
+          break;
         }
       }
     }
@@ -139,6 +142,7 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
       longitude: dto.longitude,
       isoCodes: dto.isoCodes,
       description: dto.description,
+      shortDescription: dto.shortDescription,
       dateInscribed: dto.dateInscribed,
       mainImageUrl: dto.mainImageUrl,
       imageUrls: dto.imageUrls,

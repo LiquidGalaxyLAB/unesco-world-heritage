@@ -321,4 +321,22 @@ class SettingsViewModel extends ChangeNotifier {
 
     notifyListeners();
   }
+
+  Future<void> renderKmlOnRightmostScreen({
+    required String kml,
+  }) async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    try {
+      await _lgRigService.sendKmlToRightmostScreen(kml);
+    } catch (error) {
+      _state = _state.copyWith(
+        errorMessage: 'Failed to render KML on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+  }
 }

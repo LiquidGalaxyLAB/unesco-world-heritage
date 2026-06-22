@@ -66,6 +66,13 @@ class KMLBuilder {
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&apos;');
 
+  static String _escapeHtml(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+
   static String getKmlSkeleton(String content, String name) =>
       '''
 <?xml version="1.0" encoding="UTF-8"?>
@@ -408,6 +415,56 @@ class KMLBuilder {
 <Placemark>
   <name>$title</name>
   <description><![CDATA[$content]]></description>
+  <gx:balloonVisibility>1</gx:balloonVisibility>
+  <Point>
+    <coordinates>$longitude,$latitude,0</coordinates>
+  </Point>
+</Placemark>''';
+
+    return KMLBuilder().addHeader().addCustom(balloonKml).build();
+  }
+
+  static String createSiteInfoBalloon({
+    required String title,
+    required String description,
+    required double longitude,
+    required double latitude,
+    String? imageUrl,
+  }) {
+    final safeTitle = _escapeHtml(title);
+    final safeDescription = _escapeHtml(description);
+    final imageSection =
+        imageUrl != null && imageUrl.trim().isNotEmpty
+        ? '''
+      <div style="padding:0 14px;">
+        <img src="${_escapeHtml(imageUrl.trim())}" alt="$safeTitle"
+             style="width:100%;height:270px;display:block;object-fit:cover;border-radius:0;"/>
+      </div>
+        '''
+        : '';
+
+    final balloonKml = '''
+<Placemark>
+  <name>${_escapeXml(title)}</name>
+  <Style>
+    <BalloonStyle>
+      <bgColor>ff1b1b1b</bgColor>
+      <textColor>ffffffff</textColor>
+      <text><![CDATA[
+        <div style="width:340px;background:#1f1d1d;border-radius:24px;overflow:hidden;
+                    font-family:Arial,sans-serif;color:#ffffff;box-shadow:0 12px 28px rgba(0,0,0,0.38);">
+          <div style="display:flex;align-items:center;gap:10px;padding:18px 18px 16px 18px;">
+            <div style="font-size:22px;line-height:1;color:#ffffff;">&#128205;</div>
+            <div style="font-size:15px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
+          </div>
+          $imageSection
+          <div style="padding:18px 18px 22px 18px;">
+            <p style="margin:0;font-size:14px;line-height:1.45;color:#f0f0f0;">$safeDescription</p>
+          </div>
+        </div>
+      ]]></text>
+    </BalloonStyle>
+  </Style>
   <gx:balloonVisibility>1</gx:balloonVisibility>
   <Point>
     <coordinates>$longitude,$latitude,0</coordinates>

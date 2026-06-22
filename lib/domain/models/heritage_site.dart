@@ -29,6 +29,7 @@ class HeritageSite {
     required this.longitude,
     required this.isoCodes,
     required this.description,
+    required this.shortDescription,
     required this.dateInscribed,
     required this.mainImageUrl,
     required this.imageUrls,
@@ -45,6 +46,7 @@ class HeritageSite {
   final double longitude;
   final String isoCodes;
   final String description;
+  final String shortDescription;
   final String dateInscribed;
   final String mainImageUrl;
   final List<String> imageUrls;

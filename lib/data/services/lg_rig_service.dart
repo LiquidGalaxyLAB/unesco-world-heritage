@@ -225,6 +225,17 @@ class LGRigService {
     await sendKmlToSlave(_leftmostScreen(settings.screens), content);
   }
 
+  Future<void> sendKmlToRightmostScreen(String content) async {
+    final settings = _requireConnection();
+    if (settings.screens < 2) {
+      throw const LGLocalConnectionError(
+        'At least 2 screens are required for rightmost screen rendering.',
+      );
+    }
+
+    await sendKmlToSlave(_rightmostScreen(settings.screens), content);
+  }
+
   Future<void> showLogoOverlay() async {
     final settings = _requireConnection();
     if (settings.screens < 2) {
