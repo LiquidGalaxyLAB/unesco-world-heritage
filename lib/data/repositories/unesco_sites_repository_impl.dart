@@ -8,7 +8,28 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
   UnescoSitesRepositoryImpl(this._service);
 
   final UnescoSitesService _service;
+  List<HeritageSite>? _cachedHomeSites;
   List<HeritageSite>? _cachedSites;
+
+  @override
+  Future<List<HeritageSite>> getHomeSites({int limit = 5}) async {
+    final cachedHomeSites = _cachedHomeSites;
+    if (cachedHomeSites != null && cachedHomeSites.length >= limit) {
+      return List<HeritageSite>.unmodifiable(
+        cachedHomeSites.take(limit).toList(growable: false),
+      );
+    }
+
+    final propertyIds = await _service.fetchHomeSiteIds(limit: limit);
+    final sites = <HeritageSite>[];
+    for (final propertyId in propertyIds) {
+      final dto = await _service.fetchSiteById(propertyId);
+      sites.add(_mapToDomain(dto));
+    }
+
+    _cachedHomeSites = List<HeritageSite>.unmodifiable(sites);
+    return List<HeritageSite>.unmodifiable(sites);
+  }
 
   @override
   Future<List<HeritageSite>> getAllSites() async {
@@ -102,6 +123,7 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
 
   @override
   Future<void> refresh() async {
+    _cachedHomeSites = null;
     _cachedSites = null;
     await getAllSites();
   }

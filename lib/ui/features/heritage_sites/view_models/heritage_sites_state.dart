@@ -2,6 +2,7 @@ import '../../../../domain/models/heritage_site.dart';
 
 class HeritageSitesState {
   const HeritageSitesState({
+    this.homeSites = const <HeritageSite>[],
     this.sites = const <HeritageSite>[],
     this.filteredSites = const <HeritageSite>[],
     this.searchQuery = '',
@@ -15,6 +16,7 @@ class HeritageSitesState {
     this.showDangerSites = false,
   });
 
+  final List<HeritageSite> homeSites;
   final List<HeritageSite> sites;
   final List<HeritageSite> filteredSites;
   final String searchQuery;
@@ -28,6 +30,7 @@ class HeritageSitesState {
   final bool showDangerSites;
 
   HeritageSitesState copyWith({
+    List<HeritageSite>? homeSites,
     List<HeritageSite>? sites,
     List<HeritageSite>? filteredSites,
     String? searchQuery,
@@ -42,6 +45,7 @@ class HeritageSitesState {
     bool? showDangerSites,
   }) {
     return HeritageSitesState(
+      homeSites: homeSites ?? this.homeSites,
       sites: sites ?? this.sites,
       filteredSites: filteredSites ?? this.filteredSites,
       searchQuery: searchQuery ?? this.searchQuery,
