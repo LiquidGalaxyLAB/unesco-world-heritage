@@ -53,7 +53,7 @@ class AboutView extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.lgCardBorder, width: 1),
+                  border: Border.all(color: const Color(0xFF005DAA).withOpacity(0.5), width: 1.5),
                 ),
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -88,7 +88,10 @@ class AboutView extends StatelessWidget {
                       '⬧ The UNESCO World Heritage application provides an immersive interactive experience where users can virtually travel the globe and explore special landmarks that connect us to our shared past and the natural world.\n\n'
                       '⬧ The application features Virtual Tours, comprehensive UNESCO Site Displays, AI-driven Storytelling, instant answers to user doubts and queries, and an immersive educational experience.\n\n'
                       '⬧ It works with the Liquid Galaxy rig to seamlessly synchronize mobile exploration with dynamic screen overlays and multi-screen Google Earth flights.\n\n'
-                      '⬧ Thanks to the team of the Liquid Galaxy LAB Lleida, Headquarters of the Liquid Galaxy project, and admin Andreu, for their continuous support on my project.\n Info in www.liquidgalaxy.eu',
+                      '⬧ Thanks to the team of the Liquid Galaxy LAB Lleida, Headquarters of the Liquid Galaxy project: Alba, Paula, Josep, Jordi, Oriol, Sharon, Alejandro, Marc, and admin Andreu, for their continuous support on my project. Info in www.liquidgalaxy.eu\n\n\n'
+                      'Created & Maintained By - Saumya Bhattacharya\n'
+                      'Mentors - Yash Raj Bharti, Rohit Kumar\n'
+                      'Organization Admin - Andreu Ibáñez',
                       style: TextStyle(
                         fontSize: totalWidth > 600 ? 16 : 14,
                         fontWeight: FontWeight.normal,
@@ -110,35 +113,35 @@ class AboutView extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8.0,
-                            runSpacing: 8.0,
-                            children: [
-                              _buildM3LinkChip('Project Repository', Icons.code_rounded, 'https://github.com/LiquidGalaxyLAB'),
-                              _buildM3LinkChip('LinkedIn', Icons.work_outline_rounded, 'https://www.linkedin.com/in/saumya-bhattacharya-2b6bb522b/'),
-                              _buildM3LinkChip('GitHub', Icons.account_circle_outlined, 'https://github.com/Saumya-28'),
-                              _buildM3LinkChip('Email', Icons.email_outlined, 'mailto:saumyabhattacharya112@gmail.com'),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'APIs & Data Sources',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: AppColors.onSurface,
-                              fontWeight: FontWeight.bold,
+                            Wrap(
+                              spacing: 8.0,
+                              runSpacing: 8.0,
+                              children: [
+                                _buildM3LinkChip(context, 'Project Repository', Icons.code_rounded, 'https://github.com/LiquidGalaxyLAB'),
+                                _buildM3LinkChip(context, 'LinkedIn', Icons.work_outline_rounded, 'https://www.linkedin.com/in/saumya-bhattacharya-2b6bb522b/'),
+                                _buildM3LinkChip(context, 'GitHub', Icons.account_circle_outlined, 'https://github.com/Saumya-28'),
+                                _buildM3LinkChip(context, 'Email', Icons.email_outlined, 'mailto:saumyabhattacharya112@gmail.com'),
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8.0,
-                            runSpacing: 8.0,
-                            children: [
-                              _buildM3Chip('Gemini API'),
-                              _buildM3Chip('Open-Meteo'),
-                              _buildM3Chip('ArcGIS Hub'),
-                              _buildM3Chip('UNESCO'),
-                            ],
-                          ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'APIs & Data Sources',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppColors.onSurface,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8.0,
+                              runSpacing: 8.0,
+                              children: [
+                                _buildM3Chip(context, 'Gemini API', 'For the AI Smart Assistant and Story Mode generation.', 'https://ai.google.dev/gemini-api/docs'),
+                                _buildM3Chip(context, 'Open-Meteo', 'For providing real-time weather and climate data.', 'https://open-meteo.com/'),
+                                _buildM3Chip(context, 'ArcGIS Hub', 'For spatial rendering and MultiPolygon geometry datasets.', 'https://www.arcgis.com/home/'),
+                                _buildM3Chip(context, 'UNESCO', 'For the official JSON datasets containing site information.', 'https://whc.unesco.org/'),
+                              ],
+                            ),
                         ],
                       ),
                     )
@@ -175,7 +178,7 @@ class AboutView extends StatelessWidget {
 );
 }
 
-  Widget _buildM3LinkChip(String label, IconData icon, String url) {
+  Widget _buildM3LinkChip(BuildContext context, String label, IconData icon, String url) {
     return ActionChip(
       avatar: Icon(icon, size: 16, color: AppColors.primary),
       label: Text(label),
@@ -185,7 +188,7 @@ class AboutView extends StatelessWidget {
         if (url.isNotEmpty) {
           final uri = Uri.parse(url);
           try {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
+            await launchUrl(uri);
           } catch (e) {
             debugPrint('Error launching url: $e');
           }
@@ -194,12 +197,32 @@ class AboutView extends StatelessWidget {
     );
   }
 
-  Widget _buildM3Chip(String label) {
-    return Chip(
-      label: Text(label),
-      backgroundColor: AppColors.surfaceContainerHighest,
-      side: BorderSide.none,
-      labelStyle: const TextStyle(color: AppColors.onSurface),
+  Widget _buildM3Chip(BuildContext context, String label, String description, String url) {
+    return Tooltip(
+      message: description,
+      child: ActionChip(
+        label: Text(label),
+        backgroundColor: AppColors.surfaceContainerHighest,
+        side: BorderSide.none,
+        labelStyle: const TextStyle(color: AppColors.onSurface),
+        onPressed: () async {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$label: $description'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          if (url.isNotEmpty) {
+            final uri = Uri.parse(url);
+            try {
+              await launchUrl(uri);
+            } catch (e) {
+              debugPrint('Error launching url: $e');
+            }
+          }
+        },
+      ),
     );
   }
 }
