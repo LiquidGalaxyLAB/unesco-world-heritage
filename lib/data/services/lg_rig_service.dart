@@ -40,10 +40,6 @@ class LGRigService {
 
       _client = client;
       _connectionSettings = settings;
-
-      await setRefresh();
-      await _clearSlaveScreens();
-      await _showLogoOverlay();
     } catch (_) {
       client?.close();
       _client = null;
@@ -173,6 +169,20 @@ class LGRigService {
     await _clearSlaveScreens();
   }
 
+  Future<void> clearBalloon() async {
+    final settings = _requireConnection();
+    if (settings.screens < 2) {
+      return;
+    }
+
+    await sendKmlToSlave(
+      _rightmostScreen(settings.screens),
+      KMLBuilder.generateBlankKml(
+        'slave_${_rightmostScreen(settings.screens)}',
+      ),
+    );
+  }
+
   Future<void> sendKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
     await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
@@ -215,6 +225,28 @@ class LGRigService {
     await sendKmlToSlave(_leftmostScreen(settings.screens), content);
   }
 
+  Future<void> showLogoOverlay() async {
+    final settings = _requireConnection();
+    if (settings.screens < 2) {
+      return;
+    }
+
+    final asset = await rootBundle.load(_logoAssetPath);
+    final bytes = asset.buffer.asUint8List(
+      asset.offsetInBytes,
+      asset.lengthInBytes,
+    );
+    await _writeRemoteFile('$_webRoot/$_logoFileName', bytes);
+
+    final overlay = KMLBuilder.screenOverlayImage(
+      id: 'logo',
+      name: 'Logo',
+      imageUrl: '$_lgBaseUrl/$_logoFileName',
+      factor: 500 / 554,
+    );
+    await sendKmlToSlave(_leftmostScreen(settings.screens), overlay);
+  }
+
   Future<void> startOrbit() async {
     await _run('echo "playtour=Orbit" > /tmp/query.txt');
   }
@@ -241,28 +273,6 @@ class LGRigService {
       altitudeMode: 'relativeToGround',
     );
     await _client!.run('echo "flytoview=$lookAt" > /tmp/query.txt');
-  }
-
-  Future<void> _showLogoOverlay() async {
-    final settings = _requireConnection();
-    if (settings.screens < 2) {
-      return;
-    }
-
-    final asset = await rootBundle.load(_logoAssetPath);
-    final bytes = asset.buffer.asUint8List(
-      asset.offsetInBytes,
-      asset.lengthInBytes,
-    );
-    await _writeRemoteFile('$_webRoot/$_logoFileName', bytes);
-
-    final overlay = KMLBuilder.screenOverlayImage(
-      id: 'logo',
-      name: 'Logo',
-      imageUrl: '$_lgBaseUrl/$_logoFileName',
-      factor: 500 / 554,
-    );
-    await sendKmlToSlave(_leftmostScreen(settings.screens), overlay);
   }
 
   Future<void> _clearSlaveScreens() async {
@@ -335,6 +345,11 @@ class LGRigService {
   int _leftmostScreen(int screens) {
     final calculatedScreen = (screens / 2).floor() + 2;
     return calculatedScreen > screens ? screens : calculatedScreen;
+  }
+
+  int _rightmostScreen(int screens) {
+    final calculatedScreen = (screens / 2).floor();
+    return calculatedScreen < 2 ? 2 : calculatedScreen;
   }
 
   String _validateFileName(String fileName) {

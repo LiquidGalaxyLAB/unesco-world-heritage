@@ -19,6 +19,8 @@ class HeritageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = imageUrl.trim().isNotEmpty;
+
     return Container(
       height: 180,
       width: double.infinity,
@@ -32,30 +34,41 @@ class HeritageCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // Background Image
-            Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) {
-                  return child;
-                }
+            if (hasImage)
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) {
+                    return child;
+                  }
 
-                return Shimmer(
-                  duration: const Duration(milliseconds: 1400),
-                  color: AppColors.onSurface,
-                  colorOpacity: 0.12,
-                  child: const ColoredBox(
-                    color: AppColors.surfaceContainerHighest,
+                  return Shimmer(
+                    duration: const Duration(milliseconds: 1400),
+                    color: AppColors.onSurface,
+                    colorOpacity: 0.12,
+                    child: const ColoredBox(
+                      color: AppColors.surfaceContainerHighest,
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => const Center(
+                  child: Icon(
+                    Icons.image_not_supported_rounded,
+                    color: AppColors.onSurfaceVariant,
                   ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) => const Center(
-                child: Icon(
-                  Icons.image_not_supported_rounded,
-                  color: AppColors.onSurfaceVariant,
+                ),
+              )
+            else
+              const ColoredBox(
+                color: AppColors.surfaceContainerHighest,
+                child: Center(
+                  child: Icon(
+                    Icons.image_not_supported_rounded,
+                    color: AppColors.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
             // Gradient Overlay for text readability
             DecoratedBox(
               decoration: BoxDecoration(
@@ -168,4 +181,3 @@ class HeritageCardSkeleton extends StatelessWidget {
     );
   }
 }
-

@@ -58,12 +58,26 @@ class SettingsViewModel extends ChangeNotifier {
         isConnected: true,
         isLoading: false,
       );
+      notifyListeners();
+
+      await _lgRigService.clearBalloon();
+      await _lgRigService.showLogoOverlay();
     } catch (error) {
-      _state = _state.copyWith(
-        isConnected: false,
-        isLoading: false,
-        errorMessage: 'Unable to connect using these settings. $error',
-      );
+      if (_lgRigService.isConnected) {
+        _state = _state.copyWith(
+          settings: settings,
+          isConnected: true,
+          isLoading: false,
+          errorMessage:
+              'Connected to Liquid Galaxy, but post-connect setup failed. $error',
+        );
+      } else {
+        _state = _state.copyWith(
+          isConnected: false,
+          isLoading: false,
+          errorMessage: 'Unable to connect using these settings. $error',
+        );
+      }
     }
     notifyListeners();
   }

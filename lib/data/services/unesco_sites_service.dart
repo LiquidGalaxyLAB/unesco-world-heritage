@@ -27,13 +27,18 @@ class UnescoSitesService {
     final sites = <UnescoSiteDto>[];
     var offset = 0;
 
-    final firstPage = await _fetchSitesPageInternal(offset: offset);
+    final firstPage = await _fetchSitesPageInternal(
+      offset: offset,
+      enrichMissingImages: false,
+    );
     sites.addAll(firstPage.sites);
 
     if (firstPage.totalCount > pageSize) {
       final futures = <Future<_PageResult>>[];
       for (int i = pageSize; i < firstPage.totalCount; i += pageSize) {
-        futures.add(_fetchSitesPageInternal(offset: i));
+        futures.add(
+          _fetchSitesPageInternal(offset: i, enrichMissingImages: false),
+        );
       }
       final results = await Future.wait(futures);
       for (final result in results) {
@@ -43,7 +48,10 @@ class UnescoSitesService {
       // Fallback for APIs that don't return total_count
       offset += pageSize;
       while (true) {
-        final result = await _fetchSitesPageInternal(offset: offset);
+        final result = await _fetchSitesPageInternal(
+          offset: offset,
+          enrichMissingImages: false,
+        );
         if (result.rawCount == 0) {
           break;
         }
@@ -67,11 +75,17 @@ class UnescoSitesService {
   }
 
   Future<List<UnescoSiteDto>> fetchSitesPage({int offset = 0}) async {
-    final result = await _fetchSitesPageInternal(offset: offset);
+    final result = await _fetchSitesPageInternal(
+      offset: offset,
+      enrichMissingImages: false,
+    );
     return result.sites;
   }
 
-  Future<_PageResult> _fetchSitesPageInternal({int offset = 0}) async {
+  Future<_PageResult> _fetchSitesPageInternal({
+    int offset = 0,
+    bool enrichMissingImages = true,
+  }) async {
     _PageResult result;
     try {
       final json = await _getJson(_buildRecordsUri(offset: offset));
@@ -85,6 +99,10 @@ class UnescoSitesService {
         ),
       );
       result = _parseFeatures(json);
+    }
+
+    if (!enrichMissingImages) {
+      return result;
     }
 
     return _addMissingImages(result);
