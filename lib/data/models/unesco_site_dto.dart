@@ -182,6 +182,32 @@ class UnescoSiteDto {
     );
   }
 
+  static int? readPropertyIdFromMap(
+    Map<String, dynamic> map, [
+    List<String> keys = const <String>['property_id', 'id_no'],
+  ]) {
+    return _readInt(map, keys);
+  }
+
+  static String? readNameFromMap(
+    Map<String, dynamic> map, [
+    List<String> keys = const <String>[
+      'property_name_en',
+      'element_name_en',
+      'name_en',
+    ],
+  ]) {
+    String? name = _readString(map, keys);
+    if (name == null) {
+      return null;
+    }
+
+    return name.replaceAll(
+      RegExp(r'</?(strong|b|em|i|mark|code)\b[^>]*>', caseSensitive: false),
+      '',
+    );
+  }
+
   static Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) {
       return value;

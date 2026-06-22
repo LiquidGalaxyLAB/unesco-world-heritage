@@ -91,7 +91,7 @@ class _HomeViewState extends State<HomeView> {
       return;
     }
 
-    final siteCount = widget.sitesViewModel.state.sites.length;
+    final siteCount = widget.sitesViewModel.state.homeSites.length;
     if (_visibleSiteCount >= siteCount) {
       return;
     }
@@ -181,15 +181,15 @@ class _HomeViewState extends State<HomeView> {
                         );
                       }
 
-                      if (state.sites.isEmpty) {
+                      if (state.homeSites.isEmpty) {
                         return const Center(child: Text('No sites available.'));
                       }
 
                       final visibleSiteCount =
-                          _visibleSiteCount < state.sites.length
+                          _visibleSiteCount < state.homeSites.length
                           ? _visibleSiteCount
-                          : state.sites.length;
-                      final displaySites = state.sites
+                          : state.homeSites.length;
+                      final displaySites = state.homeSites
                           .take(visibleSiteCount)
                           .toList(growable: false);
 
@@ -232,7 +232,7 @@ class _HomeViewState extends State<HomeView> {
                   ),
 
                   if (_visibleSiteCount <
-                      widget.sitesViewModel.state.sites.length) ...[
+                      widget.sitesViewModel.state.homeSites.length) ...[
                     const SizedBox(height: 16),
                     const Center(
                       child: CircularProgressIndicator(

@@ -25,10 +25,14 @@ class HeritageSitesViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final initialSites = await _repository.getSitesPage(
+      final homeSitesFuture = _repository.getHomeSites();
+      final initialSitesFuture = _repository.getSitesPage(
         offset: _initialPageOffset,
       );
+      final homeSites = await homeSitesFuture;
+      final initialSites = await initialSitesFuture;
       _state = _state.copyWith(
+        homeSites: homeSites,
         sites: initialSites,
         filteredSites: _filterSites(
           sites: initialSites,
@@ -62,8 +66,10 @@ class HeritageSitesViewModel extends ChangeNotifier {
 
     try {
       await _repository.refresh();
+      final homeSites = await _repository.getHomeSites();
       final sites = await _repository.getAllSites();
       _state = _state.copyWith(
+        homeSites: homeSites,
         sites: sites,
         filteredSites: _filterSites(
           sites: sites,

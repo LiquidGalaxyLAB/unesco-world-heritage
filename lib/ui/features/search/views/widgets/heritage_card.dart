@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 
 import '../../../../../core/theme/app_colors.dart';
@@ -35,14 +36,10 @@ class HeritageCard extends StatelessWidget {
           children: [
             // Background Image
             if (hasImage)
-              Image.network(
-                imageUrl,
+              CachedNetworkImage(
+                imageUrl: imageUrl,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) {
-                    return child;
-                  }
-
+                placeholder: (context, url) {
                   return Shimmer(
                     duration: const Duration(milliseconds: 1400),
                     color: AppColors.onSurface,
@@ -52,7 +49,7 @@ class HeritageCard extends StatelessWidget {
                     ),
                   );
                 },
-                errorBuilder: (context, error, stackTrace) => const Center(
+                errorWidget: (context, url, error) => const Center(
                   child: Icon(
                     Icons.image_not_supported_rounded,
                     color: AppColors.onSurfaceVariant,
