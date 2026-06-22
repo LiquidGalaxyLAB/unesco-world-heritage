@@ -190,32 +190,56 @@ class UnescoSitesService {
       );
     }
 
-    return _addMissingImage(sites.first);
+    return _enrichSiteMetadata(sites.first);
   }
 
   Future<_PageResult> _addMissingImages(_PageResult result) async {
-    final sites = await Future.wait(result.sites.map(_addMissingImage));
+    final sites = await Future.wait(result.sites.map(_enrichSiteMetadata));
     return _PageResult(sites, result.rawCount, totalCount: result.totalCount);
   }
 
-  Future<UnescoSiteDto> _addMissingImage(UnescoSiteDto site) async {
-    if (site.mainImageUrl.isNotEmpty) {
-      return site;
-    }
+  Future<UnescoSiteDto> _enrichSiteMetadata(UnescoSiteDto site) async {
+    var resolvedSite = site;
 
-    if (site.imageUrls.isNotEmpty) {
-      return site.copyWith(
-        mainImageUrl: site.imageUrls.first,
-        imageUrls: site.imageUrls,
+    if (resolvedSite.mainImageUrl.isEmpty && resolvedSite.imageUrls.isNotEmpty) {
+      resolvedSite = resolvedSite.copyWith(
+        mainImageUrl: resolvedSite.imageUrls.first,
+        imageUrls: resolvedSite.imageUrls,
       );
     }
 
-    final imageUrl = await _wikipediaImageService.fetchImageUrl(site.name);
-    if (imageUrl == null) {
-      return site;
+    String? wikipediaSummary;
+    if (resolvedSite.shortDescription.isEmpty || resolvedSite.description.isEmpty) {
+      wikipediaSummary = await _wikipediaImageService.fetchShortDescription(
+        resolvedSite.name,
+      );
+      if (wikipediaSummary != null && wikipediaSummary.isNotEmpty) {
+        resolvedSite = resolvedSite.copyWith(
+          shortDescription: resolvedSite.shortDescription.isEmpty
+              ? wikipediaSummary
+              : resolvedSite.shortDescription,
+          description: resolvedSite.description.isEmpty
+              ? wikipediaSummary
+              : resolvedSite.description,
+        );
+      }
     }
 
-    return site.copyWith(mainImageUrl: imageUrl, imageUrls: <String>[imageUrl]);
+    if (resolvedSite.mainImageUrl.isNotEmpty) {
+      return resolvedSite;
+    }
+
+    final imageUrl = await _wikipediaImageService.fetchImageUrl(resolvedSite.name);
+    if (imageUrl == null) {
+      return resolvedSite;
+    }
+
+    return resolvedSite.copyWith(
+      mainImageUrl: imageUrl,
+      imageUrls: {imageUrl, ...resolvedSite.imageUrls}
+          .toSet()
+          .toList(growable: false),
+    );
   }
 
   Uri _buildRecordsUri({required int offset}) {

@@ -8,6 +8,7 @@ class UnescoSiteDto {
     required this.longitude,
     required this.isoCodes,
     required this.description,
+    required this.shortDescription,
     required this.dateInscribed,
     required this.mainImageUrl,
     required this.imageUrls,
@@ -48,6 +49,8 @@ class UnescoSiteDto {
             'short_description_en',
           ]) ??
           '',
+      shortDescription:
+          _readString(record, const <String>['short_description_en']) ?? '',
       dateInscribed:
           _readString(record, const <String>['date_inscribed']) ?? '',
       mainImageUrl:
@@ -124,6 +127,12 @@ class UnescoSiteDto {
             'description_en',
           ]) ??
           '',
+      shortDescription:
+          _readString(attributes, const <String>[
+            'property_short_description_en',
+            'short_description_en',
+          ]) ??
+          '',
       dateInscribed:
           _readString(attributes, const <String>[
             'property_inscribed',
@@ -158,13 +167,19 @@ class UnescoSiteDto {
   final double longitude;
   final String isoCodes;
   final String description;
+  final String shortDescription;
   final String dateInscribed;
   final String mainImageUrl;
   final List<String> imageUrls;
   final String region;
   final bool isDanger;
 
-  UnescoSiteDto copyWith({String? mainImageUrl, List<String>? imageUrls}) {
+  UnescoSiteDto copyWith({
+    String? description,
+    String? shortDescription,
+    String? mainImageUrl,
+    List<String>? imageUrls,
+  }) {
     return UnescoSiteDto(
       propertyId: propertyId,
       name: name,
@@ -173,7 +188,8 @@ class UnescoSiteDto {
       latitude: latitude,
       longitude: longitude,
       isoCodes: isoCodes,
-      description: description,
+      description: description ?? this.description,
+      shortDescription: shortDescription ?? this.shortDescription,
       dateInscribed: dateInscribed,
       mainImageUrl: mainImageUrl ?? this.mainImageUrl,
       imageUrls: imageUrls ?? this.imageUrls,

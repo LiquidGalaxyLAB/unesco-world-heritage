@@ -13,6 +13,7 @@ import '../../../../domain/models/heritage_site_geometry.dart';
 import '../../../../domain/repositories/unesco_site_geometry_repository.dart';
 import '../../../../domain/models/weather_data.dart';
 import '../heritage_sites_dependencies.dart';
+import '../view_models/heritage_site_detail_view_model.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
 import 'widgets/gemini_chat_bottom_sheet.dart';
@@ -37,15 +38,25 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   bool _isRenderingOnLg = false;
   late final WebViewController _mapController;
   late final UnescoSiteGeometryRepository _geometryRepository;
+  late final HeritageSiteDetailViewModel _detailViewModel;
   bool _isLoadingWeather = true;
   WeatherData? _weatherData;
   Future<HeritageSiteGeometry?>? _siteGeometryFuture;
   final FlutterTts _flutterTts = FlutterTts();
+  VoidCallback? _detailViewModelListener;
 
   @override
   void initState() {
     super.initState();
     _geometryRepository = HeritageSitesDependencies.createGeometryRepository();
+    _detailViewModel = HeritageSitesDependencies.createSiteDetailViewModel();
+    _detailViewModelListener = () {
+      if (mounted) {
+        setState(() {});
+      }
+    };
+    _detailViewModel.addListener(_detailViewModelListener!);
+    _detailViewModel.loadSite(widget.site.propertyId);
     _fetchWeather();
     _initTts();
     const String mapsApiKey = String.fromEnvironment(
@@ -144,6 +155,10 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     });
 
     try {
+      final resolvedSite =
+          _detailViewModel.state.site?.propertyId == widget.site.propertyId
+          ? _detailViewModel.state.site!
+          : widget.site;
       final geometry = await _getSiteGeometry();
       if (geometry == null || geometry.boundary.isEmpty) {
         _showSnackBar('No boundary geometry available for this site.');
@@ -151,7 +166,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       }
 
       final boundaryKml = KMLBuilder.buildBoundaryKml(
-        name: widget.site.name,
+        name: resolvedSite.name,
         rings: geometry.boundary.rings
             .map(
               (ring) => ring
@@ -160,13 +175,28 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             )
             .toList(growable: false),
       );
+      final balloonDescription = resolvedSite.shortDescription.trim().isNotEmpty
+          ? resolvedSite.shortDescription.trim()
+          : resolvedSite.description.trim().isNotEmpty
+          ? resolvedSite.description.trim()
+          : 'No description available for this UNESCO World Heritage Site.';
+      final balloonKml = KMLBuilder.createSiteInfoBalloon(
+        title: resolvedSite.name,
+        description: balloonDescription,
+        longitude: resolvedSite.longitude,
+        latitude: resolvedSite.latitude,
+        imageUrl: resolvedSite.mainImageUrl,
+      );
 
       await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
         fileName: 'site_${widget.site.propertyId}.kml',
         kml: boundaryKml,
-        latitude: widget.site.latitude,
-        longitude: widget.site.longitude,
+        latitude: resolvedSite.latitude,
+        longitude: resolvedSite.longitude,
         range: 12000,
+      );
+      await widget.settingsViewModel.renderKmlOnRightmostScreen(
+        kml: balloonKml,
       );
     } catch (error) {
       _showSnackBar(error.toString());
@@ -257,12 +287,18 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   @override
   void dispose() {
     _flutterTts.stop();
+    final listener = _detailViewModelListener;
+    if (listener != null) {
+      _detailViewModel.removeListener(listener);
+    }
+    _detailViewModel.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final currentSite = _detailViewModel.state.site ?? widget.site;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -335,7 +371,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
-                    widget.site.name,
+                    currentSite.name,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       color: AppColors.onSurface,
                       fontWeight: FontWeight.w800,
@@ -433,7 +469,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Explore ${widget.site.name}',
+                              'Explore ${currentSite.name}',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 color: AppColors.onSurfaceVariant,
                               ),
@@ -457,7 +493,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                                   _isAudioPlaying = !_isAudioPlaying;
                                 });
                                 if (_isAudioPlaying) {
-                                  _flutterTts.speak(widget.site.description);
+                                  _flutterTts.speak(currentSite.description);
                                 } else {
                                   _flutterTts.stop();
                                 }
