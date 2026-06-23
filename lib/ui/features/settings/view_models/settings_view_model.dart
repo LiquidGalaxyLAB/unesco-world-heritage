@@ -247,6 +247,8 @@ class SettingsViewModel extends ChangeNotifier {
     required double latitude,
     required double longitude,
     required double range,
+    String? orbitFileName,
+    String? orbitKml,
     double altitude = 150,
     double tilt = 60,
     double bearing = 0,
@@ -259,6 +261,8 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      await _lgRigService.stopOrbit();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
       await _lgRigService.clearMaster();
       await _lgRigService.flyTo(
         latitude: latitude,
@@ -268,7 +272,17 @@ class SettingsViewModel extends ChangeNotifier {
         tilt: tilt,
         bearing: bearing,
       );
+      await Future<void>.delayed(const Duration(seconds: 3));
       await _lgRigService.sendKml(fileName, kml);
+      if (orbitFileName != null &&
+          orbitFileName.trim().isNotEmpty &&
+          orbitKml != null &&
+          orbitKml.trim().isNotEmpty) {
+        await _lgRigService.uploadKml(orbitFileName, orbitKml);
+        await _lgRigService.appendKml(orbitFileName);
+        await Future<void>.delayed(const Duration(seconds: 2));
+        await _lgRigService.startOrbit();
+      }
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
       _state = _state.copyWith(

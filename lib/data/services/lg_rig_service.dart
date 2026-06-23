@@ -191,6 +191,11 @@ class LGRigService {
     );
   }
 
+  Future<void> uploadKml(String fileName, String content) async {
+    final safeFileName = _validateFileName(fileName);
+    await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
+  }
+
   Future<void> appendKml(String fileName) async {
     final safeFileName = _validateFileName(fileName);
     await _client!.run(

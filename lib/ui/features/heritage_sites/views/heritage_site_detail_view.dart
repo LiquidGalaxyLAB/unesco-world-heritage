@@ -175,6 +175,17 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             )
             .toList(growable: false),
       );
+      final orbitCenter = _calculateGeometryCenter(
+        _calculateGeometryBounds(geometry.boundary),
+      );
+      final orbitKml = KMLBuilder.createCityTour(
+        tourName: 'Orbit',
+        latitude: orbitCenter.latitude,
+        longitude: orbitCenter.longitude,
+        range: 12000,
+        tilt: 60,
+        orbitDuration: 30,
+      );
       final balloonDescription = resolvedSite.shortDescription.trim().isNotEmpty
           ? resolvedSite.shortDescription.trim()
           : resolvedSite.description.trim().isNotEmpty
@@ -191,9 +202,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
         fileName: 'site_${widget.site.propertyId}.kml',
         kml: boundaryKml,
-        latitude: resolvedSite.latitude,
-        longitude: resolvedSite.longitude,
-        range: 12000,
+        latitude: orbitCenter.latitude,
+        longitude: orbitCenter.longitude,
+        range: 9000,
+        orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
+        orbitKml: orbitKml,
       );
       await widget.settingsViewModel.renderKmlOnRightmostScreen(
         kml: balloonKml,
