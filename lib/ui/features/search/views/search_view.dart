@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../domain/models/heritage_site.dart';
 import '../../heritage_sites/view_models/heritage_sites_view_model.dart';
+import '../../heritage_sites/view_models/heritage_sites_state.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
 import '../../heritage_sites/views/heritage_site_detail_view.dart';
@@ -37,6 +39,9 @@ class _SearchViewState extends State<SearchView> {
 
   @override
   void dispose() {
+    if (widget.sitesViewModel.state.searchQuery.isNotEmpty) {
+      widget.sitesViewModel.search('');
+    }
     _searchController.dispose();
     _scrollController
       ..removeListener(_loadNextPage)
@@ -50,7 +55,7 @@ class _SearchViewState extends State<SearchView> {
       return;
     }
 
-    final siteCount = widget.sitesViewModel.state.filteredSites.length;
+    final siteCount = _displaySites(widget.sitesViewModel.state).length;
     if (_visibleSiteCount >= siteCount) {
       return;
     }
@@ -69,6 +74,32 @@ class _SearchViewState extends State<SearchView> {
       _scrollController.jumpTo(0);
     }
     widget.sitesViewModel.search(query);
+  }
+
+  bool _shouldShowHomeSites(HeritageSitesState state) {
+    return state.searchQuery.trim().isEmpty &&
+        state.selectedRegions.isEmpty &&
+        state.selectedStates.isEmpty &&
+        state.selectedCategories.isEmpty &&
+        state.startYear == null &&
+        state.endYear == null &&
+        !state.showDangerSites;
+  }
+
+  List<HeritageSite> _displaySites(HeritageSitesState state) {
+    if (!_shouldShowHomeSites(state)) {
+      return state.filteredSites;
+    }
+
+    final homeSiteIds = state.homeSites.map((site) => site.propertyId).toSet();
+    final remainingSites = state.filteredSites
+        .where((site) => !homeSiteIds.contains(site.propertyId))
+        .toList(growable: false);
+
+    return List<HeritageSite>.unmodifiable([
+      ...state.homeSites,
+      ...remainingSites,
+    ]);
   }
 
   @override
@@ -128,7 +159,8 @@ class _SearchViewState extends State<SearchView> {
                         context: context,
                         isScrollControlled: true,
                         backgroundColor: Colors.transparent,
-                        builder: (context) => FilterBottomSheet(viewModel: widget.sitesViewModel),
+                        builder: (context) =>
+                            FilterBottomSheet(viewModel: widget.sitesViewModel),
                       );
                     },
                   ),
@@ -160,12 +192,14 @@ class _SearchViewState extends State<SearchView> {
                     return ListView.separated(
                       padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
                       itemCount: 5,
-                      separatorBuilder: (context, index) => const SizedBox(height: 20),
-                      itemBuilder: (context, index) => const HeritageCardSkeleton(),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 20),
+                      itemBuilder: (context, index) =>
+                          const HeritageCardSkeleton(),
                     );
                   }
 
-                  final sites = state.filteredSites;
+                  final sites = _displaySites(state);
                   final visibleSiteCount = _visibleSiteCount < sites.length
                       ? _visibleSiteCount
                       : sites.length;

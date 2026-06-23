@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../../domain/models/heritage_site.dart';
+import '../../../../domain/repositories/unesco_site_geometry_repository.dart';
 import '../../../../domain/repositories/unesco_sites_repository.dart';
 import 'heritage_sites_state.dart';
 
 class HeritageSitesViewModel extends ChangeNotifier {
-  HeritageSitesViewModel(this._repository);
+  HeritageSitesViewModel(this._repository, this._geometryRepository);
 
   static const int _initialPageOffset = 0;
   final UnescoSitesRepository _repository;
+  final UnescoSiteGeometryRepository _geometryRepository;
   Future<void>? _backgroundLoadFuture;
+  Set<int> _arcGisGeometrySiteIds = const <int>{};
 
   HeritageSitesState _state = const HeritageSitesState(isLoading: true);
   HeritageSitesState get state => _state;
@@ -29,21 +32,14 @@ class HeritageSitesViewModel extends ChangeNotifier {
       final initialSitesFuture = _repository.getSitesPage(
         offset: _initialPageOffset,
       );
+      final arcGisGeometrySiteIdsFuture = _loadArcGisGeometrySiteIds();
       final homeSites = await homeSitesFuture;
       final initialSites = await initialSitesFuture;
+      _arcGisGeometrySiteIds = await arcGisGeometrySiteIdsFuture;
       _state = _state.copyWith(
         homeSites: homeSites,
         sites: initialSites,
-        filteredSites: _filterSites(
-          sites: initialSites,
-          query: _state.searchQuery,
-          regions: _state.selectedRegions,
-          states: _state.selectedStates,
-          categories: _state.selectedCategories,
-          startYear: _state.startYear,
-          endYear: _state.endYear,
-          showDangerSites: _state.showDangerSites,
-        ),
+        filteredSites: _buildFilteredSites(sites: initialSites),
         isLoading: false,
       );
       notifyListeners();
@@ -65,22 +61,17 @@ class HeritageSitesViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _repository.refresh();
+      await Future.wait<void>([
+        _repository.refresh(),
+        _geometryRepository.refresh(),
+      ]);
       final homeSites = await _repository.getHomeSites();
       final sites = await _repository.getAllSites();
+      _arcGisGeometrySiteIds = await _loadArcGisGeometrySiteIds();
       _state = _state.copyWith(
         homeSites: homeSites,
         sites: sites,
-        filteredSites: _filterSites(
-          sites: sites,
-          query: _state.searchQuery,
-          regions: _state.selectedRegions,
-          states: _state.selectedStates,
-          categories: _state.selectedCategories,
-          startYear: _state.startYear,
-          endYear: _state.endYear,
-          showDangerSites: _state.showDangerSites,
-        ),
+        filteredSites: _buildFilteredSites(sites: sites),
         isLoading: false,
       );
     } catch (_) {
@@ -98,16 +89,7 @@ class HeritageSitesViewModel extends ChangeNotifier {
       final sites = await _repository.getAllSites();
       _state = _state.copyWith(
         sites: sites,
-        filteredSites: _filterSites(
-          sites: sites,
-          query: _state.searchQuery,
-          regions: _state.selectedRegions,
-          states: _state.selectedStates,
-          categories: _state.selectedCategories,
-          startYear: _state.startYear,
-          endYear: _state.endYear,
-          showDangerSites: _state.showDangerSites,
-        ),
+        filteredSites: _buildFilteredSites(sites: sites),
       );
       notifyListeners();
     } catch (_) {
@@ -123,16 +105,7 @@ class HeritageSitesViewModel extends ChangeNotifier {
   void search(String query) {
     _state = _state.copyWith(
       searchQuery: query,
-      filteredSites: _filterSites(
-        sites: _state.sites,
-        query: query,
-        regions: _state.selectedRegions,
-        states: _state.selectedStates,
-        categories: _state.selectedCategories,
-        startYear: _state.startYear,
-        endYear: _state.endYear,
-        showDangerSites: _state.showDangerSites,
-      ),
+      filteredSites: _buildFilteredSites(sites: _state.sites, query: query),
     );
     notifyListeners();
   }
@@ -159,7 +132,7 @@ class HeritageSitesViewModel extends ChangeNotifier {
       startYear: newStartYear,
       endYear: newEndYear,
       showDangerSites: newShowDangerSites,
-      filteredSites: _filterSites(
+      filteredSites: _buildFilteredSites(
         sites: _state.sites,
         query: _state.searchQuery,
         regions: newRegions,
@@ -188,6 +161,38 @@ class HeritageSitesViewModel extends ChangeNotifier {
   void clearError() {
     _state = _state.copyWith(clearError: true);
     notifyListeners();
+  }
+
+  Future<Set<int>> _loadArcGisGeometrySiteIds() async {
+    try {
+      return await _geometryRepository.getArcGisGeometrySiteIds();
+    } catch (_) {
+      return const <int>{};
+    }
+  }
+
+  List<HeritageSite> _buildFilteredSites({
+    required List<HeritageSite> sites,
+    String? query,
+    Set<String>? regions,
+    Set<String>? states,
+    Set<HeritageCategory>? categories,
+    int? startYear,
+    int? endYear,
+    bool? showDangerSites,
+  }) {
+    return _rankSites(
+      _filterSites(
+        sites: sites,
+        query: query ?? _state.searchQuery,
+        regions: regions ?? _state.selectedRegions,
+        states: states ?? _state.selectedStates,
+        categories: categories ?? _state.selectedCategories,
+        startYear: startYear ?? _state.startYear,
+        endYear: endYear ?? _state.endYear,
+        showDangerSites: showDangerSites ?? _state.showDangerSites,
+      ),
+    );
   }
 
   List<HeritageSite> _filterSites({
@@ -243,5 +248,27 @@ class HeritageSitesViewModel extends ChangeNotifier {
           return true;
         })
         .toList(growable: false);
+  }
+
+  List<HeritageSite> _rankSites(List<HeritageSite> sites) {
+    if (_arcGisGeometrySiteIds.isEmpty || sites.length < 2) {
+      return List<HeritageSite>.unmodifiable(sites);
+    }
+
+    final prioritizedSites = <HeritageSite>[];
+    final remainingSites = <HeritageSite>[];
+
+    for (final site in sites) {
+      if (_arcGisGeometrySiteIds.contains(site.propertyId)) {
+        prioritizedSites.add(site);
+      } else {
+        remainingSites.add(site);
+      }
+    }
+
+    return List<HeritageSite>.unmodifiable([
+      ...prioritizedSites,
+      ...remainingSites,
+    ]);
   }
 }

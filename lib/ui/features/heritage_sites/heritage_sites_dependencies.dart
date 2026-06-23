@@ -28,7 +28,10 @@ class HeritageSitesDependencies {
   }
 
   static HeritageSitesViewModel createSitesViewModel() {
-    return HeritageSitesViewModel(createRepository());
+    return HeritageSitesViewModel(
+      createRepository(),
+      createGeometryRepository(),
+    );
   }
 
   static HeritageSiteDetailViewModel createSiteDetailViewModel() {

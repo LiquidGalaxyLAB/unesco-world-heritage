@@ -21,10 +21,23 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
   final UnescoSiteGeometryService _service;
   final UnescoSitesService? _sitesService;
   final GeminiGeometryService? _geminiGeometryService;
+  Future<Set<int>>? _arcGisGeometrySiteIdsFuture;
   Future<List<WdpaSiteCandidateDto>>? _wdpaCandidatesFuture;
   final Map<int, HeritageSiteGeometry> _cachedGeometries =
       <int, HeritageSiteGeometry>{};
   static const double _wdpaMatchThreshold = 0.75;
+
+  @override
+  Future<Set<int>> getArcGisGeometrySiteIds() async {
+    final existingFuture = _arcGisGeometrySiteIdsFuture;
+    if (existingFuture != null) {
+      return existingFuture;
+    }
+
+    final future = _fetchArcGisGeometrySiteIdsInternal();
+    _arcGisGeometrySiteIdsFuture = future;
+    return future;
+  }
 
   @override
   Future<HeritageSiteGeometry?> getSiteGeometry(int propertyId) async {
@@ -103,7 +116,18 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
   @override
   Future<void> refresh() async {
     _cachedGeometries.clear();
+    _arcGisGeometrySiteIdsFuture = null;
     _wdpaCandidatesFuture = null;
+  }
+
+  Future<Set<int>> _fetchArcGisGeometrySiteIdsInternal() async {
+    final boundaryIds = await _fetchArcGisPropertyIdsOrEmpty(
+      UnescoGeometryLayer.boundary,
+    );
+    final bufferIds = await _fetchArcGisPropertyIdsOrEmpty(
+      UnescoGeometryLayer.buffer,
+    );
+    return Set<int>.unmodifiable({...boundaryIds, ...bufferIds});
   }
 
   Future<List<UnescoSiteGeometryDto>> _fetchOrEmpty(
@@ -113,6 +137,16 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
       return await fetch();
     } on UnescoSitesException {
       return const <UnescoSiteGeometryDto>[];
+    }
+  }
+
+  Future<Set<int>> _fetchArcGisPropertyIdsOrEmpty(
+    UnescoGeometryLayer layer,
+  ) async {
+    try {
+      return await _service.fetchPropertyIdsWithGeometry(layer: layer);
+    } on UnescoSitesException {
+      return const <int>{};
     }
   }
 

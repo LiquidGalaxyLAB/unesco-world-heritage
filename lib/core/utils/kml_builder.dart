@@ -433,8 +433,7 @@ class KMLBuilder {
   }) {
     final safeTitle = _escapeHtml(title);
     final safeDescription = _escapeHtml(description);
-    final imageSection =
-        imageUrl != null && imageUrl.trim().isNotEmpty
+    final imageSection = imageUrl != null && imageUrl.trim().isNotEmpty
         ? '''
       <div style="padding:0 14px;">
         <img src="${_escapeHtml(imageUrl.trim())}" alt="$safeTitle"
@@ -443,7 +442,8 @@ class KMLBuilder {
         '''
         : '';
 
-    final balloonKml = '''
+    final balloonKml =
+        '''
 <Placemark>
   <name>${_escapeXml(title)}</name>
   <Style>

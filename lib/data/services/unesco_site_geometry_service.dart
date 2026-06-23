@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/unesco_site_dto.dart';
 import '../models/unesco_site_geometry_dto.dart';
 import '../models/wdpa_site_candidate_dto.dart';
 import 'unesco_api_exceptions.dart';
@@ -23,6 +24,7 @@ class UnescoSiteGeometryService {
       'https://services6.arcgis.com/eMd5K6XXEvJETxfQ/ArcGIS/rest/services/prd_whc_sites_dossiers_elements_v2_view/FeatureServer';
   static const String _wdpaNaturalSitesEndpoint =
       'https://services5.arcgis.com/Mj0hjvkNtV7NRhA7/ArcGIS/rest/services/WDPA_v0/FeatureServer/1/query';
+  static const int _arcGisPageSize = 2000;
   static const int _wdpaPageSize = 2000;
 
   final http.Client _client;
@@ -39,6 +41,29 @@ class UnescoSiteGeometryService {
       propertyId: propertyId,
       layer: UnescoGeometryLayer.buffer,
     );
+  }
+
+  Future<Set<int>> fetchPropertyIdsWithGeometry({
+    required UnescoGeometryLayer layer,
+  }) async {
+    final propertyIds = <int>{};
+    for (var offset = 0; ; offset += _arcGisPageSize) {
+      final json = await _getJson(
+        _buildPropertyIdsUri(layer: layer, offset: offset),
+      );
+      final page = _parsePropertyIdPage(json);
+      if (page.rawCount == 0) {
+        break;
+      }
+
+      propertyIds.addAll(page.propertyIds);
+      if (page.rawCount < _arcGisPageSize &&
+          json['exceededTransferLimit'] != true) {
+        break;
+      }
+    }
+
+    return Set<int>.unmodifiable(propertyIds);
   }
 
   Future<List<WdpaSiteCandidateDto>> fetchWdpaSiteCandidates() async {
@@ -121,6 +146,24 @@ class UnescoSiteGeometryService {
     );
   }
 
+  Uri _buildPropertyIdsUri({
+    required UnescoGeometryLayer layer,
+    required int offset,
+  }) {
+    return Uri.parse('$_serviceBaseUrl/${layer.layerId}/query').replace(
+      queryParameters: <String, String>{
+        'f': 'json',
+        'where': 'property_id IS NOT NULL',
+        'outFields': 'property_id',
+        'returnGeometry': 'false',
+        'returnCentroid': 'false',
+        'resultOffset': '$offset',
+        'resultRecordCount': '$_arcGisPageSize',
+        'orderByFields': 'property_id ASC',
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
     http.Response response;
     try {
@@ -195,5 +238,44 @@ class UnescoSiteGeometryService {
     }
 
     return candidates;
+  }
+}
+
+class _PropertyIdPageResult {
+  const _PropertyIdPageResult(this.propertyIds, this.rawCount);
+
+  final Set<int> propertyIds;
+  final int rawCount;
+}
+
+extension on UnescoSiteGeometryService {
+  _PropertyIdPageResult _parsePropertyIdPage(Map<String, dynamic> json) {
+    final features = json['features'];
+    if (features is! List) {
+      throw const UnescoSitesParseException(
+        'UNESCO geometry response is missing features.',
+      );
+    }
+
+    final propertyIds = <int>{};
+    for (final feature in features) {
+      if (feature is! Map) {
+        continue;
+      }
+
+      final attributes = feature['attributes'];
+      if (attributes is! Map) {
+        continue;
+      }
+
+      final propertyId = UnescoSiteDto.readPropertyIdFromMap(
+        Map<String, dynamic>.from(attributes),
+      );
+      if (propertyId != null) {
+        propertyIds.add(propertyId);
+      }
+    }
+
+    return _PropertyIdPageResult(propertyIds, features.length);
   }
 }
