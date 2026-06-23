@@ -39,6 +39,9 @@ class _SearchViewState extends State<SearchView> {
 
   @override
   void dispose() {
+    if (widget.sitesViewModel.state.searchQuery.isNotEmpty) {
+      widget.sitesViewModel.search('');
+    }
     _searchController.dispose();
     _scrollController
       ..removeListener(_loadNextPage)
@@ -73,10 +76,29 @@ class _SearchViewState extends State<SearchView> {
     widget.sitesViewModel.search(query);
   }
 
+  bool _shouldShowHomeSites(HeritageSitesState state) {
+    return state.searchQuery.trim().isEmpty &&
+        state.selectedRegions.isEmpty &&
+        state.selectedStates.isEmpty &&
+        state.selectedCategories.isEmpty &&
+        state.startYear == null &&
+        state.endYear == null &&
+        !state.showDangerSites;
+  }
+
   List<HeritageSite> _displaySites(HeritageSitesState state) {
+    if (!_shouldShowHomeSites(state)) {
+      return state.filteredSites;
+    }
+
+    final homeSiteIds = state.homeSites.map((site) => site.propertyId).toSet();
+    final remainingSites = state.filteredSites
+        .where((site) => !homeSiteIds.contains(site.propertyId))
+        .toList(growable: false);
+
     return List<HeritageSite>.unmodifiable([
       ...state.homeSites,
-      ...state.filteredSites,
+      ...remainingSites,
     ]);
   }
 

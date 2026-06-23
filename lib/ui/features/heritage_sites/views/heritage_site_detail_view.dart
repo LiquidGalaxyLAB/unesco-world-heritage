@@ -35,6 +35,7 @@ class HeritageSiteDetailView extends StatefulWidget {
 class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   String _selectedTab = 'Overview';
   bool _isAudioPlaying = false;
+  bool _isOrbitActive = false;
   bool _isRenderingOnLg = false;
   late final WebViewController _mapController;
   late final UnescoSiteGeometryRepository _geometryRepository;
@@ -145,6 +146,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       return;
     }
 
+    if (_isOrbitActive) {
+      await _handleStopOrbitPressed();
+      return;
+    }
+
     if (!widget.settingsViewModel.state.isConnected) {
       _showSnackBar('Connect to Liquid Galaxy first.');
       return;
@@ -160,30 +166,20 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
           ? _detailViewModel.state.site!
           : widget.site;
       final geometry = await _getSiteGeometry();
-      if (geometry == null || geometry.boundary.isEmpty) {
-        _showSnackBar('No boundary geometry available for this site.');
-        return;
-      }
-
-      final boundaryKml = KMLBuilder.buildBoundaryKml(
-        name: resolvedSite.name,
-        rings: geometry.boundary.rings
-            .map(
-              (ring) => ring
-                  .map((point) => <double>[point.latitude, point.longitude])
-                  .toList(growable: false),
-            )
-            .toList(growable: false),
+      final cameraProfile = _buildCameraProfile(
+        site: resolvedSite,
+        geometry: geometry,
       );
-      final orbitCenter = _calculateGeometryCenter(
-        _calculateGeometryBounds(geometry.boundary),
+      final boundaryKml = _buildRenderableSiteKml(
+        site: resolvedSite,
+        geometry: geometry,
       );
       final orbitKml = KMLBuilder.createCityTour(
         tourName: 'Orbit',
-        latitude: orbitCenter.latitude,
-        longitude: orbitCenter.longitude,
-        range: 12000,
-        tilt: 60,
+        latitude: cameraProfile.center.latitude,
+        longitude: cameraProfile.center.longitude,
+        range: cameraProfile.orbitRange,
+        tilt: cameraProfile.tilt,
         orbitDuration: 30,
       );
       final balloonDescription = resolvedSite.shortDescription.trim().isNotEmpty
@@ -202,15 +198,21 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
         fileName: 'site_${widget.site.propertyId}.kml',
         kml: boundaryKml,
-        latitude: orbitCenter.latitude,
-        longitude: orbitCenter.longitude,
-        range: 9000,
+        latitude: cameraProfile.center.latitude,
+        longitude: cameraProfile.center.longitude,
+        range: cameraProfile.flyToRange,
         orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
         orbitKml: orbitKml,
+        tilt: cameraProfile.tilt,
       );
       await widget.settingsViewModel.renderKmlOnRightmostScreen(
         kml: balloonKml,
       );
+      if (mounted) {
+        setState(() {
+          _isOrbitActive = true;
+        });
+      }
     } catch (error) {
       _showSnackBar(error.toString());
     } finally {
@@ -220,6 +222,62 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         });
       }
     }
+  }
+
+  Future<void> _handleStopOrbitPressed() async {
+    final shouldStop = await _showStopOrbitDialog();
+    if (shouldStop != true) {
+      return;
+    }
+
+    if (!widget.settingsViewModel.state.isConnected) {
+      _showSnackBar('Connect to Liquid Galaxy first.');
+      return;
+    }
+
+    setState(() {
+      _isRenderingOnLg = true;
+    });
+
+    try {
+      await widget.settingsViewModel.stopOrbitOnLiquidGalaxy();
+      if (mounted) {
+        setState(() {
+          _isOrbitActive = false;
+        });
+      }
+    } catch (error) {
+      _showSnackBar(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRenderingOnLg = false;
+        });
+      }
+    }
+  }
+
+  Future<bool?> _showStopOrbitDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerHighest,
+          title: const Text('Would you like to stop orbit?'),
+          content: const Text('The current orbit will stop on Liquid Galaxy.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Stop'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   _GeometryBounds _calculateGeometryBounds(HeritagePolygonGeometry geometry) {
@@ -262,6 +320,112 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       (bounds.minLatitude + bounds.maxLatitude) / 2,
       (bounds.minLongitude + bounds.maxLongitude) / 2,
     );
+  }
+
+  _SiteCameraProfile _buildCameraProfile({
+    required HeritageSite site,
+    HeritageSiteGeometry? geometry,
+  }) {
+    final hasBoundary = geometry != null && !geometry.boundary.isEmpty;
+    final bounds = hasBoundary
+        ? _calculateGeometryBounds(geometry.boundary)
+        : const _GeometryBounds.empty();
+    final center = bounds.isValid
+        ? _calculateGeometryCenter(bounds)
+        : _LatLngCenter(site.latitude, site.longitude);
+    final orbitRange = bounds.isValid
+        ? _calculateAdaptiveOrbitRange(bounds, center.latitude)
+        : _fallbackOrbitRange(site.category);
+    final flyToRange = _clampRange(orbitRange * 0.78, min: 4000, max: 36000);
+
+    return _SiteCameraProfile(
+      center: center,
+      flyToRange: flyToRange,
+      orbitRange: orbitRange,
+      tilt: _adaptiveTilt(orbitRange),
+    );
+  }
+
+  double _calculateAdaptiveOrbitRange(
+    _GeometryBounds bounds,
+    double centerLatitude,
+  ) {
+    final latSpanDegrees = (bounds.maxLatitude - bounds.minLatitude).abs();
+    final lngSpanDegrees = (bounds.maxLongitude - bounds.minLongitude).abs();
+    if (latSpanDegrees == 0 && lngSpanDegrees == 0) {
+      return _fallbackOrbitRange(widget.site.category);
+    }
+
+    final longitudeScale = math.max(
+      0.2,
+      math.cos(centerLatitude * math.pi / 180).abs(),
+    );
+    final latSpanMeters = latSpanDegrees * 111320;
+    final lngSpanMeters = lngSpanDegrees * 111320 * longitudeScale;
+    final maxSpanMeters = math.max(latSpanMeters, lngSpanMeters);
+    final diagonalMeters = math.sqrt(
+      (latSpanMeters * latSpanMeters) + (lngSpanMeters * lngSpanMeters),
+    );
+    final framingSpanMeters = math.max(maxSpanMeters, diagonalMeters * 0.9);
+
+    return _clampRange(framingSpanMeters * 2.6, min: 5000, max: 42000);
+  }
+
+  double _fallbackOrbitRange(HeritageCategory category) {
+    switch (category) {
+      case HeritageCategory.natural:
+        return 16000;
+      case HeritageCategory.mixed:
+        return 12000;
+      case HeritageCategory.cultural:
+        return 8500;
+      case HeritageCategory.unknown:
+        return 12000;
+    }
+  }
+
+  double _adaptiveTilt(double orbitRange) {
+    if (orbitRange >= 25000) {
+      return 50;
+    }
+    if (orbitRange >= 15000) {
+      return 55;
+    }
+    return 60;
+  }
+
+  double _clampRange(double value, {required double min, required double max}) {
+    return value.clamp(min, max).toDouble();
+  }
+
+  String _buildRenderableSiteKml({
+    required HeritageSite site,
+    HeritageSiteGeometry? geometry,
+  }) {
+    if (geometry != null && !geometry.boundary.isEmpty) {
+      return KMLBuilder.buildBoundaryKml(
+        name: site.name,
+        rings: geometry.boundary.rings
+            .map(
+              (ring) => ring
+                  .map((point) => <double>[point.latitude, point.longitude])
+                  .toList(growable: false),
+            )
+            .toList(growable: false),
+      );
+    }
+
+    return KMLBuilder()
+        .addHeader()
+        .addPlacemark(
+          name: site.name,
+          longitude: site.longitude,
+          latitude: site.latitude,
+          description: site.shortDescription.trim().isNotEmpty
+              ? site.shortDescription.trim()
+              : null,
+        )
+        .build();
   }
 
   void _showSnackBar(String message) {
@@ -355,6 +519,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                             icon: Icon(
                               _isRenderingOnLg
                                   ? Icons.hourglass_top_rounded
+                                  : _isOrbitActive
+                                  ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
                               color: AppColors.onSurface,
                             ),
@@ -819,4 +985,18 @@ class _GeometryBounds {
       maxLatitude.isFinite &&
       minLongitude.isFinite &&
       maxLongitude.isFinite;
+}
+
+class _SiteCameraProfile {
+  const _SiteCameraProfile({
+    required this.center,
+    required this.flyToRange,
+    required this.orbitRange,
+    required this.tilt,
+  });
+
+  final _LatLngCenter center;
+  final double flyToRange;
+  final double orbitRange;
+  final double tilt;
 }

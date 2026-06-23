@@ -241,6 +241,29 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> stopOrbitOnLiquidGalaxy() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.stopOrbit();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to stop orbit on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
+
   Future<void> renderKmlOnLiquidGalaxy({
     required String fileName,
     required String kml,
@@ -336,9 +359,7 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> renderKmlOnRightmostScreen({
-    required String kml,
-  }) async {
+  Future<void> renderKmlOnRightmostScreen({required String kml}) async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
     }
