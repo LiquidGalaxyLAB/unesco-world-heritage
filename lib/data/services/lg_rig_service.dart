@@ -11,8 +11,15 @@ class LGRigService {
   static const String _lgBaseUrl = 'http://lg1:81';
   static const String _webRoot = '/var/www/html';
   static const String _slaveKmlDirectory = '$_webRoot/kml';
-  static const String _logoAssetPath = 'assets/images/logos.png';
-  static const String _logoFileName = 'logos.png';
+  static const String _logoUrl =
+      'https://raw.githubusercontent.com/Saumya-28/lg_360_explorer/refs/heads/main/lg_logo.png';
+
+  // Splash screen assets
+  static const String _splashTopAsset = 'assets/images/UNESCO_AboutPageTop.png';
+  static const String _splashTopFileName = 'UNESCO_AboutPageTop.png';
+  static const String _splashBottomAsset =
+      'assets/images/AboutPage_Bottom_2.png';
+  static const String _splashBottomFileName = 'AboutPage_Bottom_2.png';
 
   SSHClient? _client;
   SftpClient? _sftp;
@@ -164,9 +171,16 @@ class LGRigService {
     await _run('echo "exittour=true" > /tmp/query.txt && > $_webRoot/kmls.txt');
   }
 
-  Future<void> clearKmlAndLogos() async {
-    await clearKml();
-    await _clearSlaveScreens();
+  Future<void> clearLogoOverlay() async {
+    final settings = _requireConnection();
+    if (settings.screens < 2) {
+      return;
+    }
+
+    await sendKmlToSlave(
+      _leftmostScreen(settings.screens),
+      KMLBuilder.generateBlankKml('slave_${_leftmostScreen(settings.screens)}'),
+    );
   }
 
   Future<void> clearBalloon() async {
@@ -241,23 +255,81 @@ class LGRigService {
     await sendKmlToSlave(_rightmostScreen(settings.screens), content);
   }
 
+  /// Sends a splash screen to the LG leftmost slave screen.
+  /// Layout mirrors the About screen:
+  ///   - Top half : UNESCO_AboutPageTop.png (hero illustration)
+  ///   - Bottom half : AboutPage_Bottom_2.png (all partner logos)
+  Future<void> showSplashScreen() async {
+    final settings = _requireConnection();
+    if (settings.screens < 2) return;
+
+    // Upload both images via SFTP
+    final topAsset = await rootBundle.load(_splashTopAsset);
+    await _writeRemoteFile(
+      '$_webRoot/$_splashTopFileName',
+      topAsset.buffer.asUint8List(
+        topAsset.offsetInBytes,
+        topAsset.lengthInBytes,
+      ),
+    );
+
+    final bottomAsset = await rootBundle.load(_splashBottomAsset);
+    await _writeRemoteFile(
+      '$_webRoot/$_splashBottomFileName',
+      bottomAsset.buffer.asUint8List(
+        bottomAsset.offsetInBytes,
+        bottomAsset.lengthInBytes,
+      ),
+    );
+
+    // Build KML with two stacked ScreenOverlays
+    final splashKml =
+        '''
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"
+     xmlns:gx="http://www.google.com/kml/ext/2.2"
+     xmlns:kml="http://www.opengis.net/kml/2.2"
+     xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+  <name>UNESCO Splash</name>
+  <open>1</open>
+
+  <!-- Top: UNESCO hero illustration (upper ~48% of screen) -->
+  <ScreenOverlay id="splash_top">
+    <name>Splash Top</name>
+    <Icon><href>$_lgBaseUrl/$_splashTopFileName</href></Icon>
+    <overlayXY x="0" y="1" xunits="fraction" yunits="fraction"/>
+    <screenXY x="0" y="1" xunits="fraction" yunits="fraction"/>
+    <rotationXY x="0" y="0" xunits="fraction" yunits="fraction"/>
+    <size x="1" y="0.45" xunits="fraction" yunits="fraction"/>
+  </ScreenOverlay>
+
+  <!-- Bottom: All partner logos (lower ~48% of screen) -->
+  <ScreenOverlay id="splash_bottom">
+    <name>Splash Bottom</name>
+    <Icon><href>$_lgBaseUrl/$_splashBottomFileName</href></Icon>
+    <overlayXY x="0" y="1" xunits="fraction" yunits="fraction"/>
+    <screenXY x="0" y="0.52" xunits="fraction" yunits="fraction"/>
+    <rotationXY x="0" y="0" xunits="fraction" yunits="fraction"/>
+    <size x="1" y="0.48" xunits="fraction" yunits="fraction"/>
+  </ScreenOverlay>
+
+</Document>
+</kml>''';
+
+    await sendKmlToSlave(_leftmostScreen(settings.screens), splashKml);
+  }
+
   Future<void> showLogoOverlay() async {
     final settings = _requireConnection();
     if (settings.screens < 2) {
       return;
     }
 
-    final asset = await rootBundle.load(_logoAssetPath);
-    final bytes = asset.buffer.asUint8List(
-      asset.offsetInBytes,
-      asset.lengthInBytes,
-    );
-    await _writeRemoteFile('$_webRoot/$_logoFileName', bytes);
-
     final overlay = KMLBuilder.screenOverlayImage(
       id: 'logo',
       name: 'Logo',
-      imageUrl: '$_lgBaseUrl/$_logoFileName',
+      imageUrl: _logoUrl,
       factor: 500 / 554,
     );
     await sendKmlToSlave(_leftmostScreen(settings.screens), overlay);
@@ -289,25 +361,6 @@ class LGRigService {
       altitudeMode: 'relativeToGround',
     );
     await _client!.run('echo "flytoview=$lookAt" > /tmp/query.txt');
-  }
-
-  Future<void> _clearSlaveScreens() async {
-    final settings = _requireConnection();
-    if (settings.screens < 2) {
-      return;
-    }
-
-    await _ensureSlaveKmlDirectory();
-    for (var screen = 2; screen <= settings.screens; screen++) {
-      await _writeRemoteFile(
-        '$_slaveKmlDirectory/slave_$screen.kml',
-        utf8.encode(KMLBuilder.generateBlankKml('slave_$screen')),
-      );
-    }
-  }
-
-  Future<void> _ensureSlaveKmlDirectory() async {
-    await _run('mkdir -p $_slaveKmlDirectory');
   }
 
   Future<void> _writeRemoteFile(String path, List<int> bytes) async {
@@ -364,8 +417,13 @@ class LGRigService {
   }
 
   int _rightmostScreen(int screens) {
-    final calculatedScreen = (screens / 2).floor();
-    return calculatedScreen < 2 ? 2 : calculatedScreen;
+    if (screens == 1) {
+      return 1;
+    }
+
+    // Calculate right-most screen: floor(screens/2) + 1
+    // Ensures balloon visibility while preserving main visualization space
+    return (screens / 2).floor() + 1;
   }
 
   String _validateFileName(String fileName) {

@@ -44,7 +44,9 @@ class CommandTab extends StatelessWidget {
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: isEnabled ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+              color: isEnabled
+                  ? AppColors.onPrimary
+                  : AppColors.onSurfaceVariant,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -96,14 +98,11 @@ class CommandTab extends StatelessWidget {
                   const SizedBox(height: 18),
                   _buildCommandButton(
                     context,
-                    title: 'Clean KML+ Logos',
+                    title: 'Clean KML',
                     isEnabled: isConnected,
                     onPressed: () {
-                      viewModel.sendClearKmlAndLogosCommand();
-                      _showCommandMessage(
-                        context,
-                        'Clean KML + logos command sent',
-                      );
+                      viewModel.sendClearKmlCommand();
+                      _showCommandMessage(context, 'Clean KML command sent');
                     },
                   ),
                   const SizedBox(height: 18),
@@ -119,11 +118,11 @@ class CommandTab extends StatelessWidget {
                   const SizedBox(height: 18),
                   _buildCommandButton(
                     context,
-                    title: 'Clean KML',
+                    title: 'Clean Logo',
                     isEnabled: isConnected,
                     onPressed: () {
-                      viewModel.sendClearKmlCommand();
-                      _showCommandMessage(context, 'Clean KML command sent');
+                      viewModel.sendClearLogoCommand();
+                      _showCommandMessage(context, 'Clean logo command sent');
                     },
                   ),
                 ],
