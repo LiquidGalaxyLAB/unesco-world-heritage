@@ -12,7 +12,7 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  static const AssetImage _heroImage = AssetImage('assets/images/logo_2.png');
+  static const AssetImage _heroImage = AssetImage('assets/images/logos.png');
 
   Timer? _navigationTimer;
   bool _didStartSplash = false;
