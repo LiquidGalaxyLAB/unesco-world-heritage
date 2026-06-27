@@ -4,19 +4,26 @@ import 'package:http/http.dart' as http;
 
 import '../models/unesco_site_geometry_dto.dart';
 import 'unesco_api_exceptions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class GeminiGeometryService {
-  GeminiGeometryService({http.Client? client, String? apiKey})
-    : _client = client ?? http.Client(),
-      _apiKey = apiKey ?? const String.fromEnvironment('GEMINI_API_KEY');
+  GeminiGeometryService({http.Client? client})
+    : _client = client ?? http.Client();
 
   static const String _endpoint =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   final http.Client _client;
-  final String _apiKey;
 
-  bool get isConfigured => _apiKey.trim().isNotEmpty;
+  Future<String> _getApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('gemini_api_key') ?? '';
+  }
+
+  Future<bool> get isConfigured async {
+    final key = await _getApiKey();
+    return key.trim().isNotEmpty;
+  }
 
   Future<List<UnescoSiteGeometryDto>> fetchGeneratedGeometry({
     required int propertyId,
@@ -25,14 +32,15 @@ class GeminiGeometryService {
     required double latitude,
     required double longitude,
   }) async {
-    if (!isConfigured) {
+    final apiKey = await _getApiKey();
+    if (apiKey.trim().isEmpty) {
       return const <UnescoSiteGeometryDto>[];
     }
 
     final response = await _client.post(
       Uri.parse(
         _endpoint,
-      ).replace(queryParameters: <String, String>{'key': _apiKey}),
+      ).replace(queryParameters: <String, String>{'key': apiKey}),
       headers: const <String, String>{'content-type': 'application/json'},
       body: jsonEncode(<String, Object?>{
         'contents': <Object>[

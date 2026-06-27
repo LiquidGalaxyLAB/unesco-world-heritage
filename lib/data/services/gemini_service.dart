@@ -8,11 +8,15 @@ class GeminiService {
   String? _apiKey;
 
   Future<void> _ensureApiKey() async {
-    if (_apiKey != null && _apiKey!.isNotEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    _apiKey = prefs.getString('gemini_api_key');
-    if (_apiKey == null || _apiKey!.isEmpty) {
+    final currentKey = prefs.getString('gemini_api_key');
+    if (currentKey == null || currentKey.isEmpty) {
       throw Exception('Gemini API key is not set. Please set it in Auth screen.');
+    }
+    
+    if (_apiKey != currentKey) {
+      _apiKey = currentKey;
+      _chatSession = null;
     }
   }
 

@@ -75,7 +75,7 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
     }
 
     final geminiService = _geminiGeometryService;
-    if (site != null && geminiService != null && geminiService.isConfigured) {
+    if (site != null && geminiService != null && await geminiService.isConfigured) {
       final geminiGeometries = await _fetchOrEmpty(
         () => geminiService.fetchGeneratedGeometry(
           propertyId: propertyId,
