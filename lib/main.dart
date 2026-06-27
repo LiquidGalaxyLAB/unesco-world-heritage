@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
-import 'ui/features/settings/views/settings_view.dart';
+import 'ui/features/splash/views/splash_screen.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,7 +17,7 @@ class HeritageApp extends StatelessWidget {
       title: 'UNESCO World Heritage',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const MainNavigationShell(),
+      home: const SplashScreen(),
     );
   }
 }
