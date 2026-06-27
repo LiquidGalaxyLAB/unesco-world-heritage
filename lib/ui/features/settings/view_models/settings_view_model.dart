@@ -60,6 +60,7 @@ class SettingsViewModel extends ChangeNotifier {
       );
       notifyListeners();
 
+      await _lgRigService.clearKml();
       await _lgRigService.clearBalloon();
       await _lgRigService.showLogoOverlay();
     } catch (error) {
@@ -190,18 +191,18 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendClearKmlAndLogosCommand() async {
+  Future<void> sendClearLogoCommand() async {
     if (!state.isConnected) return;
     _state = _state.copyWith(isLoading: true, clearError: true);
     notifyListeners();
 
     try {
-      await _lgRigService.clearKmlAndLogos();
+      await _lgRigService.clearLogoOverlay();
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
       _state = _state.copyWith(
         isLoading: false,
-        errorMessage: 'Failed to clear KML and logos. $error',
+        errorMessage: 'Failed to clear logo overlay. $error',
       );
     }
     notifyListeners();
@@ -241,6 +242,29 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> startOrbitOnLiquidGalaxy() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.startOrbit();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to start orbit on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
+
   Future<void> stopOrbitOnLiquidGalaxy() async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
@@ -275,6 +299,7 @@ class SettingsViewModel extends ChangeNotifier {
     double altitude = 150,
     double tilt = 60,
     double bearing = 0,
+    bool startOrbitAfterRender = true,
   }) async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
@@ -303,8 +328,10 @@ class SettingsViewModel extends ChangeNotifier {
           orbitKml.trim().isNotEmpty) {
         await _lgRigService.uploadKml(orbitFileName, orbitKml);
         await _lgRigService.appendKml(orbitFileName);
-        await Future<void>.delayed(const Duration(seconds: 2));
-        await _lgRigService.startOrbit();
+        if (startOrbitAfterRender) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          await _lgRigService.startOrbit();
+        }
       }
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
@@ -327,6 +354,7 @@ class SettingsViewModel extends ChangeNotifier {
     double altitude = 150,
     double tilt = 60,
     double bearing = 0,
+    bool startOrbitAfterRender = true,
   }) async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
@@ -365,6 +393,10 @@ class SettingsViewModel extends ChangeNotifier {
     }
 
     try {
+      await _lgRigService.resetRefresh();
+      await _lgRigService.setRefresh();
+      await _lgRigService.clearBalloon();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       await _lgRigService.sendKmlToRightmostScreen(kml);
     } catch (error) {
       _state = _state.copyWith(

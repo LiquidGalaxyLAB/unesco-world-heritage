@@ -432,46 +432,64 @@ class KMLBuilder {
     String? imageUrl,
   }) {
     final safeTitle = _escapeHtml(title);
+    final safeTitleXml = _escapeXml(title);
     final safeDescription = _escapeHtml(description);
-    final imageSection = imageUrl != null && imageUrl.trim().isNotEmpty
+    final normalizedImageUrl = imageUrl?.trim() ?? '';
+    final imageSection = normalizedImageUrl.isNotEmpty
         ? '''
-      <div style="padding:0 14px;">
-        <img src="${_escapeHtml(imageUrl.trim())}" alt="$safeTitle"
-             style="width:100%;height:270px;display:block;object-fit:cover;border-radius:0;"/>
-      </div>
+        <div style="padding:0 18px;">
+          <img src="${_escapeHtml(normalizedImageUrl)}" alt="$safeTitle"
+               style="width:100%;height:380px;display:block;object-fit:cover;border-radius:0;"/>
+        </div>
         '''
         : '';
 
-    final balloonKml =
-        '''
-<Placemark>
-  <name>${_escapeXml(title)}</name>
-  <Style>
-    <BalloonStyle>
-      <bgColor>ff1b1b1b</bgColor>
-      <textColor>ffffffff</textColor>
-      <text><![CDATA[
-        <div style="width:340px;background:#1f1d1d;border-radius:24px;overflow:hidden;
-                    font-family:Arial,sans-serif;color:#ffffff;box-shadow:0 12px 28px rgba(0,0,0,0.38);">
-          <div style="display:flex;align-items:center;gap:10px;padding:18px 18px 16px 18px;">
-            <div style="font-size:22px;line-height:1;color:#ffffff;">&#128205;</div>
-            <div style="font-size:15px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
+    return '''
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+  <Document>
+   <name>Site Info</name>
+   <Style id="site_info_balloon">
+     <BalloonStyle>
+        <bgColor>ff1b1b1b</bgColor>
+        <textColor>ffffffff</textColor>
+        <text><![CDATA[
+          <div style="width:700px;background:#1f1d1d;border-radius:24px;overflow:hidden;
+                      font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
+                      box-shadow:0 16px 36px rgba(0,0,0,0.42);">
+            <div style="display:flex;align-items:center;gap:14px;padding:22px 22px 18px 22px;"><!--
+              <h2 style="margin: 0; font-size: 25px; font-weight: 700;">ðŸ“ $title</h2>
+            --></div>
+            <div style="display:flex;align-items:center;gap:14px;padding:0 22px 18px 22px;">
+              <div style="font-size:32px;line-height:1;color:#ffffff;">&#128205;</div>
+              <div style="font-size:36px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
+            </div>
+            $imageSection
+            <div style="padding:22px 22px 26px 22px;">
+              <p style="margin:0;font-size:28px;line-height:1.6;color:#f0f0f0;">$safeDescription</p>
+            </div>
           </div>
-          $imageSection
-          <div style="padding:18px 18px 22px 18px;">
-            <p style="margin:0;font-size:14px;line-height:1.45;color:#f0f0f0;">$safeDescription</p>
-          </div>
-        </div>
-      ]]></text>
-    </BalloonStyle>
-  </Style>
-  <gx:balloonVisibility>1</gx:balloonVisibility>
-  <Point>
-    <coordinates>$longitude,$latitude,0</coordinates>
-  </Point>
-</Placemark>''';
-
-    return KMLBuilder().addHeader().addCustom(balloonKml).build();
+        ]]></text>
+     </BalloonStyle>
+   </Style>
+    <Placemark id="site_info_balloon_marker">
+      <name>$safeTitleXml</name>
+      <description></description>
+     <LookAt>
+       <longitude>$longitude</longitude>
+       <latitude>$latitude</latitude>
+       <heading>0</heading>
+       <tilt>0</tilt>
+       <range>12</range>
+     </LookAt>
+      <styleUrl>#site_info_balloon</styleUrl>
+     <gx:balloonVisibility>1</gx:balloonVisibility>
+     <Point>
+       <coordinates>$longitude,$latitude,0</coordinates>
+     </Point>
+   </Placemark>
+  </Document>
+  </kml>''';
   }
 
   static String createScreenOverlay({

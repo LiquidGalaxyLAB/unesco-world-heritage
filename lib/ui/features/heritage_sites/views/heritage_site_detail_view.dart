@@ -36,6 +36,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   String _selectedTab = 'Overview';
   bool _isAudioPlaying = false;
   bool _isOrbitActive = false;
+  bool _isLgScenePrepared = false;
   bool _isRenderingOnLg = false;
   late final WebViewController _mapController;
   late final UnescoSiteGeometryRepository _geometryRepository;
@@ -141,7 +142,98 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
   }
 
-  Future<void> _handlePlayPressed() async {
+  Future<_LgRenderPayload> _buildLgRenderPayload() async {
+    final resolvedSite =
+        _detailViewModel.state.site?.propertyId == widget.site.propertyId
+        ? _detailViewModel.state.site!
+        : widget.site;
+    final geometry = await _getSiteGeometry();
+    final cameraProfile = _buildCameraProfile(
+      site: resolvedSite,
+      geometry: geometry,
+    );
+    final boundaryKml = _buildRenderableSiteKml(
+      site: resolvedSite,
+      geometry: geometry,
+    );
+    final orbitKml = KMLBuilder.createCityTour(
+      tourName: 'Orbit',
+      latitude: cameraProfile.center.latitude,
+      longitude: cameraProfile.center.longitude,
+      range: cameraProfile.orbitRange,
+      tilt: cameraProfile.tilt,
+      orbitDuration: 30,
+    );
+    final balloonDescription = resolvedSite.shortDescription.trim().isNotEmpty
+        ? resolvedSite.shortDescription.trim()
+        : resolvedSite.description.trim().isNotEmpty
+        ? resolvedSite.description.trim()
+        : 'No description available for this UNESCO World Heritage Site.';
+    final balloonKml = KMLBuilder.createSiteInfoBalloon(
+      title: resolvedSite.name,
+      description: balloonDescription,
+      longitude: resolvedSite.longitude,
+      latitude: resolvedSite.latitude,
+      imageUrl: resolvedSite.mainImageUrl,
+    );
+
+    return _LgRenderPayload(
+      cameraProfile: cameraProfile,
+      boundaryKml: boundaryKml,
+      orbitKml: orbitKml,
+      balloonKml: balloonKml,
+    );
+  }
+
+  Future<void> _handleFlyToPressed() async {
+    if (_isRenderingOnLg) {
+      return;
+    }
+
+    if (!widget.settingsViewModel.state.isConnected) {
+      _showSnackBar('Connect to Liquid Galaxy first.');
+      return;
+    }
+
+    setState(() {
+      _isRenderingOnLg = true;
+    });
+
+    try {
+      final payload = await _buildLgRenderPayload();
+
+      await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
+        fileName: 'site_${widget.site.propertyId}.kml',
+        kml: payload.boundaryKml,
+        latitude: payload.cameraProfile.center.latitude,
+        longitude: payload.cameraProfile.center.longitude,
+        range: payload.cameraProfile.flyToRange,
+        orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
+        orbitKml: payload.orbitKml,
+        tilt: payload.cameraProfile.tilt,
+        startOrbitAfterRender: false,
+      );
+      await widget.settingsViewModel.renderKmlOnRightmostScreen(
+        kml: payload.balloonKml,
+      );
+      if (mounted) {
+        setState(() {
+          _isOrbitActive = false;
+          _isLgScenePrepared = true;
+        });
+      }
+    } catch (error) {
+      _showSnackBar(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRenderingOnLg = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleOrbitPressed() async {
     if (_isRenderingOnLg) {
       return;
     }
@@ -156,58 +248,17 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       return;
     }
 
+    if (!_isLgScenePrepared) {
+      _showSnackBar('Tap Fly To first.');
+      return;
+    }
+
     setState(() {
       _isRenderingOnLg = true;
     });
 
     try {
-      final resolvedSite =
-          _detailViewModel.state.site?.propertyId == widget.site.propertyId
-          ? _detailViewModel.state.site!
-          : widget.site;
-      final geometry = await _getSiteGeometry();
-      final cameraProfile = _buildCameraProfile(
-        site: resolvedSite,
-        geometry: geometry,
-      );
-      final boundaryKml = _buildRenderableSiteKml(
-        site: resolvedSite,
-        geometry: geometry,
-      );
-      final orbitKml = KMLBuilder.createCityTour(
-        tourName: 'Orbit',
-        latitude: cameraProfile.center.latitude,
-        longitude: cameraProfile.center.longitude,
-        range: cameraProfile.orbitRange,
-        tilt: cameraProfile.tilt,
-        orbitDuration: 30,
-      );
-      final balloonDescription = resolvedSite.shortDescription.trim().isNotEmpty
-          ? resolvedSite.shortDescription.trim()
-          : resolvedSite.description.trim().isNotEmpty
-          ? resolvedSite.description.trim()
-          : 'No description available for this UNESCO World Heritage Site.';
-      final balloonKml = KMLBuilder.createSiteInfoBalloon(
-        title: resolvedSite.name,
-        description: balloonDescription,
-        longitude: resolvedSite.longitude,
-        latitude: resolvedSite.latitude,
-        imageUrl: resolvedSite.mainImageUrl,
-      );
-
-      await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
-        fileName: 'site_${widget.site.propertyId}.kml',
-        kml: boundaryKml,
-        latitude: cameraProfile.center.latitude,
-        longitude: cameraProfile.center.longitude,
-        range: cameraProfile.flyToRange,
-        orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
-        orbitKml: orbitKml,
-        tilt: cameraProfile.tilt,
-      );
-      await widget.settingsViewModel.renderKmlOnRightmostScreen(
-        kml: balloonKml,
-      );
+      await widget.settingsViewModel.startOrbitOnLiquidGalaxy();
       if (mounted) {
         setState(() {
           _isOrbitActive = true;
@@ -506,28 +557,33 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                         ),
                         child: WebViewWidget(controller: _mapController),
                       ),
-                      // Play Button
                       Positioned(
                         right: 16,
                         bottom: 16,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            icon: Icon(
-                              _isRenderingOnLg
+                        child: Row(
+                          children: [
+                            _buildLgActionButton(
+                              icon: _isRenderingOnLg
+                                  ? Icons.hourglass_top_rounded
+                                  : Icons.flight_takeoff_rounded,
+                              label: 'Fly To',
+                              onPressed: _isRenderingOnLg
+                                  ? null
+                                  : _handleFlyToPressed,
+                            ),
+                            const SizedBox(width: 10),
+                            _buildLgActionButton(
+                              icon: _isRenderingOnLg
                                   ? Icons.hourglass_top_rounded
                                   : _isOrbitActive
                                   ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: AppColors.onSurface,
+                                  : Icons.travel_explore_rounded,
+                              label: _isOrbitActive ? 'Stop Orbit' : 'Orbit',
+                              onPressed: _isRenderingOnLg
+                                  ? null
+                                  : _handleOrbitPressed,
                             ),
-                            onPressed: _isRenderingOnLg
-                                ? null
-                                : _handlePlayPressed,
-                          ),
+                          ],
                         ),
                       ),
                     ],
@@ -821,6 +877,29 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
   }
 
+  Widget _buildLgActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.surfaceContainerHighest,
+        foregroundColor: AppColors.onSurface,
+        disabledBackgroundColor: AppColors.surfaceContainerHighest.withValues(
+          alpha: 0.85,
+        ),
+        disabledForegroundColor: AppColors.onSurfaceVariant,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+
   Widget _buildClimateTab(ThemeData theme) {
     if (_isLoadingWeather) {
       return SingleChildScrollView(
@@ -1000,3 +1079,20 @@ class _SiteCameraProfile {
   final double orbitRange;
   final double tilt;
 }
+
+class _LgRenderPayload {
+  const _LgRenderPayload({
+    required this.cameraProfile,
+    required this.boundaryKml,
+    required this.orbitKml,
+    required this.balloonKml,
+  });
+
+  final _SiteCameraProfile cameraProfile;
+  final String boundaryKml;
+  final String orbitKml;
+  final String balloonKml;
+}
+
+
+
