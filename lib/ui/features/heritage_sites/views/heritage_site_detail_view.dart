@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -60,10 +61,16 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     _detailViewModel.loadSite(widget.site.propertyId);
     _fetchWeather();
     _initTts();
-    const String mapsApiKey = String.fromEnvironment(
-      'MAPS_API_KEY',
-      defaultValue: '',
-    );
+
+    _mapController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted);
+      
+    _loadMapHtml();
+  }
+
+  Future<void> _loadMapHtml() async {
+    final prefs = await SharedPreferences.getInstance();
+    final mapsApiKey = prefs.getString('google_map_api_key') ?? '';
 
     final htmlContent =
         '''
@@ -97,9 +104,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 </html>
 ''';
 
-    _mapController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadHtmlString(htmlContent);
+    await _mapController.loadHtmlString(htmlContent);
   }
 
   Future<void> _fetchWeather() async {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../settings/view_models/settings_view_model.dart';
@@ -31,10 +32,18 @@ class _HomeViewState extends State<HomeView> {
   @override
   void initState() {
     super.initState();
-    const String mapsApiKey = String.fromEnvironment(
-      'MAPS_API_KEY',
-      defaultValue: '',
-    );
+
+    _mapController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted);
+      
+    _loadMapHtml();
+
+    _scrollController.addListener(_loadNextPage);
+  }
+
+  Future<void> _loadMapHtml() async {
+    final prefs = await SharedPreferences.getInstance();
+    final mapsApiKey = prefs.getString('google_map_api_key') ?? '';
 
     final htmlContent =
         '''
@@ -67,11 +76,7 @@ class _HomeViewState extends State<HomeView> {
 </html>
 ''';
 
-    _mapController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadHtmlString(htmlContent);
-
-    _scrollController.addListener(_loadNextPage);
+    await _mapController.loadHtmlString(htmlContent);
   }
 
   String _capitalize(String s) =>
