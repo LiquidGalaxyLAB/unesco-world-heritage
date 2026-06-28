@@ -219,7 +219,7 @@ class HeritageSitesViewModel extends ChangeNotifier {
             return false;
           }
 
-          if (states.isNotEmpty) {
+          if (states.isNotEmpty && query.isEmpty) {
             final siteStates = site.country
                 .split(',')
                 .map((s) => s.trim())

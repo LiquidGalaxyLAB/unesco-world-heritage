@@ -31,6 +31,26 @@ class _SearchViewState extends State<SearchView> {
   final ScrollController _scrollController = ScrollController();
   int _visibleSiteCount = _pageSize;
 
+  List<String> _cachedStates = [];
+  int _cachedSitesCount = -1;
+
+  void _updateCachedStates(List<HeritageSite> sites) {
+    if (sites.length == _cachedSitesCount) return;
+    _cachedSitesCount = sites.length;
+
+    final uniqueStates = <String>{};
+    for (final site in sites) {
+      if (site.country.isNotEmpty) {
+        final parts = site.country.split(',');
+        for (final p in parts) {
+          final st = p.trim();
+          if (st.isNotEmpty) uniqueStates.add(st);
+        }
+      }
+    }
+    _cachedStates = uniqueStates.toList()..sort();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -182,7 +202,71 @@ class _SearchViewState extends State<SearchView> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            ListenableBuilder(
+              listenable: widget.sitesViewModel,
+              builder: (context, _) {
+                final state = widget.sitesViewModel.state;
+                if (state.sites.isEmpty) {
+                  return const SizedBox(height: 40);
+                }
+                
+                _updateCachedStates(state.sites);
+                final statesList = _cachedStates;
+                final selectedStates = state.selectedStates;
+
+                return SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    itemCount: statesList.length + 1,
+                    separatorBuilder: (context, index) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final isAllSites = index == 0;
+                      final stateName = isAllSites ? 'All Sites' : statesList[index - 1];
+                      final isSelected = isAllSites 
+                          ? selectedStates.isEmpty 
+                          : selectedStates.contains(stateName);
+
+                      return ChoiceChip(
+                        label: Text(
+                          stateName,
+                          style: TextStyle(
+                            color: isSelected 
+                                ? AppColors.onPrimaryContainer 
+                                : AppColors.onSurfaceVariant,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        selectedColor: const Color(0xFF376A7C),
+                        backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.5),
+                        side: const BorderSide(color: AppColors.outlineVariant, width: 0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        onSelected: (selected) {
+                          if (isAllSites) {
+                            if (!isSelected) {
+                              widget.sitesViewModel.applyFilters(states: {});
+                            }
+                          } else {
+                            if (selected) {
+                              widget.sitesViewModel.filterByCountry(stateName);
+                            } else {
+                              widget.sitesViewModel.applyFilters(states: {});
+                            }
+                          }
+                        },
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
             Expanded(
               child: ListenableBuilder(
                 listenable: widget.sitesViewModel,
