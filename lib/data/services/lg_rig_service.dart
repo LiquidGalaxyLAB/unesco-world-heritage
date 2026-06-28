@@ -12,7 +12,7 @@ class LGRigService {
   static const String _webRoot = '/var/www/html';
   static const String _slaveKmlDirectory = '$_webRoot/kml';
   static const String _logoUrl =
-      'https://raw.githubusercontent.com/Saumya-28/lg_360_explorer/refs/heads/main/lg_logo.png';
+      'https://raw.githubusercontent.com/Saumya-28/lg_360_explorer/refs/heads/main/logos.png';
 
   // Splash screen assets
   static const String _splashTopAsset = 'assets/images/UNESCO_AboutPageTop.png';
