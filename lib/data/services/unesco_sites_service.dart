@@ -23,64 +23,16 @@ class UnescoSitesService {
   final http.Client _client;
   final WikipediaImageService _wikipediaImageService;
 
-  Future<List<int>> fetchHomeSiteIds({int limit = 5}) async {
-    if (limit <= 0) {
-      return const <int>[];
-    }
-
-    final propertyIds = <int>{};
-    for (var offset = 0; propertyIds.length < limit; offset += pageSize) {
-      final json = await _getJson(
-        _buildArcGisUri(
-          where: '1=1',
-          resultOffset: offset,
-          resultRecordCount: pageSize,
-          outFields: 'property_id,property_name_en',
-          returnGeometry: false,
-          returnCentroid: false,
-          orderByFields: 'OBJECTID ASC',
-        ),
-      );
-
-      final features = json['features'];
-      if (features is! List || features.isEmpty) {
-        break;
-      }
-
-      for (final feature in features) {
-        if (feature is! Map) {
-          continue;
-        }
-
-        final attributes = feature['attributes'];
-        if (attributes is! Map) {
-          continue;
-        }
-
-        final propertyId = UnescoSiteDto.readPropertyIdFromMap(
-          Map<String, dynamic>.from(attributes),
-        );
-        final name = UnescoSiteDto.readNameFromMap(
-          Map<String, dynamic>.from(attributes),
-          const <String>['property_name_en', 'element_name_en', 'name_en'],
-        );
-        if (propertyId == null || name == null) {
-          continue;
-        }
-
-        propertyIds.add(propertyId);
-        if (propertyIds.length == limit) {
-          break;
-        }
-      }
-
-      if (features.length < pageSize &&
-          json['exceededTransferLimit'] != true) {
-        break;
-      }
-    }
-
-    return List<int>.unmodifiable(propertyIds);
+  Future<List<int>> fetchHomeSiteIds({int limit = 6}) async {
+    // Curated home page sites:
+    // 1594 - Jodrell Bank Observatory
+    // 1467 - Speicherstadt and Kontorhaus District with Chilehaus
+    // 1400 - Lakes of Ounianga
+    //  937 - Península Valdés
+    //  629 - Macquarie Island
+    // 1196 - Architectural, Residential and Cultural Complex of the Radziwiłł Family at Nesvizh
+    const curatedIds = <int>[1594, 1467, 1400, 937, 629, 1196];
+    return List<int>.unmodifiable(curatedIds.take(limit));
   }
 
   Future<List<UnescoSiteDto>> fetchAllSites() async {

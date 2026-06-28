@@ -1,7 +1,7 @@
 import '../models/heritage_site.dart';
 
 abstract class UnescoSitesRepository {
-  Future<List<HeritageSite>> getHomeSites({int limit = 5});
+  Future<List<HeritageSite>> getHomeSites({int limit = 6});
 
   Future<List<HeritageSite>> getAllSites();
 

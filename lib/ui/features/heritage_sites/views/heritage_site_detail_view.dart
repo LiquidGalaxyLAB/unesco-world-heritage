@@ -392,7 +392,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     final orbitRange = bounds.isValid
         ? _calculateAdaptiveOrbitRange(bounds, center.latitude)
         : _fallbackOrbitRange(site.category);
-    final flyToRange = _clampRange(orbitRange * 0.78, min: 4000, max: 36000);
+    final flyToRange = _clampRange(orbitRange * 0.42, min: 1800, max: 14000);
 
     return _SiteCameraProfile(
       center: center,
@@ -424,19 +424,19 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
     final framingSpanMeters = math.max(maxSpanMeters, diagonalMeters * 0.9);
 
-    return _clampRange(framingSpanMeters * 2.6, min: 5000, max: 42000);
+    return _clampRange(framingSpanMeters * 1.1, min: 2500, max: 19000);
   }
 
   double _fallbackOrbitRange(HeritageCategory category) {
     switch (category) {
       case HeritageCategory.natural:
-        return 16000;
+        return 6500;
       case HeritageCategory.mixed:
-        return 12000;
+        return 5000;
       case HeritageCategory.cultural:
-        return 8500;
+        return 3500;
       case HeritageCategory.unknown:
-        return 12000;
+        return 5000;
     }
   }
 
