@@ -58,12 +58,27 @@ class SettingsViewModel extends ChangeNotifier {
         isConnected: true,
         isLoading: false,
       );
+      notifyListeners();
+
+      await _lgRigService.clearKml();
+      await _lgRigService.clearBalloon();
+      await _lgRigService.showLogoOverlay();
     } catch (error) {
-      _state = _state.copyWith(
-        isConnected: false,
-        isLoading: false,
-        errorMessage: 'Unable to connect using these settings. $error',
-      );
+      if (_lgRigService.isConnected) {
+        _state = _state.copyWith(
+          settings: settings,
+          isConnected: true,
+          isLoading: false,
+          errorMessage:
+              'Connected to Liquid Galaxy, but post-connect setup failed. $error',
+        );
+      } else {
+        _state = _state.copyWith(
+          isConnected: false,
+          isLoading: false,
+          errorMessage: 'Unable to connect using these settings. $error',
+        );
+      }
     }
     notifyListeners();
   }
@@ -176,20 +191,219 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendClearKmlAndLogosCommand() async {
+  Future<void> sendClearLogoCommand() async {
     if (!state.isConnected) return;
     _state = _state.copyWith(isLoading: true, clearError: true);
     notifyListeners();
 
     try {
-      await _lgRigService.clearKmlAndLogos();
+      await _lgRigService.clearLogoOverlay();
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
       _state = _state.copyWith(
         isLoading: false,
-        errorMessage: 'Failed to clear KML and logos. $error',
+        errorMessage: 'Failed to clear logo overlay. $error',
       );
     }
     notifyListeners();
+  }
+
+  Future<void> sendSetRefreshCommand() async {
+    if (!state.isConnected) return;
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.setRefresh();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to set refresh on LG. $error',
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> sendResetRefreshCommand() async {
+    if (!state.isConnected) return;
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.resetRefresh();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to reset refresh on LG. $error',
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> startOrbitOnLiquidGalaxy() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.startOrbit();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to start orbit on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> stopOrbitOnLiquidGalaxy() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.stopOrbit();
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to stop orbit on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> renderKmlOnLiquidGalaxy({
+    required String fileName,
+    required String kml,
+    required double latitude,
+    required double longitude,
+    required double range,
+    String? orbitFileName,
+    String? orbitKml,
+    double altitude = 150,
+    double tilt = 60,
+    double bearing = 0,
+    bool startOrbitAfterRender = true,
+  }) async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.stopOrbit();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await _lgRigService.clearMaster();
+      await _lgRigService.flyTo(
+        latitude: latitude,
+        longitude: longitude,
+        altitude: altitude,
+        zoom: range,
+        tilt: tilt,
+        bearing: bearing,
+      );
+      await Future<void>.delayed(const Duration(seconds: 3));
+      await _lgRigService.sendKml(fileName, kml);
+      if (orbitFileName != null &&
+          orbitFileName.trim().isNotEmpty &&
+          orbitKml != null &&
+          orbitKml.trim().isNotEmpty) {
+        await _lgRigService.uploadKml(orbitFileName, orbitKml);
+        await _lgRigService.appendKml(orbitFileName);
+        if (startOrbitAfterRender) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          await _lgRigService.startOrbit();
+        }
+      }
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to render KML on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> renderKmlOnLeftmostScreen({
+    required String kml,
+    required double latitude,
+    required double longitude,
+    required double range,
+    double altitude = 150,
+    double tilt = 60,
+    double bearing = 0,
+    bool startOrbitAfterRender = true,
+  }) async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    _state = _state.copyWith(isLoading: true, clearError: true);
+    notifyListeners();
+
+    try {
+      await _lgRigService.flyTo(
+        latitude: latitude,
+        longitude: longitude,
+        altitude: altitude,
+        zoom: range,
+        tilt: tilt,
+        bearing: bearing,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await _lgRigService.sendKmlToLeftmostScreen(kml);
+      _state = _state.copyWith(isLoading: false);
+    } catch (error) {
+      _state = _state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to render KML on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> renderKmlOnRightmostScreen({required String kml}) async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    try {
+      await _lgRigService.resetRefresh();
+      await _lgRigService.setRefresh();
+      await _lgRigService.clearBalloon();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await _lgRigService.sendKmlToRightmostScreen(kml);
+    } catch (error) {
+      _state = _state.copyWith(
+        errorMessage: 'Failed to render KML on Liquid Galaxy. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
   }
 }

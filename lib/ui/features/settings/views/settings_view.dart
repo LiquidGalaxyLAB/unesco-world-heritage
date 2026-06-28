@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../domain/models/lg_connection_settings.dart';
 import '../../auth/views/auth_view.dart';
+import '../../heritage_sites/heritage_sites_dependencies.dart';
+import '../../heritage_sites/view_models/heritage_sites_view_model.dart';
 import '../../search/views/search_view.dart';
+import '../../about/views/about_view.dart';
 import '../settings_dependencies.dart';
 import '../view_models/settings_view_model.dart';
 import 'widgets/about_components.dart';
 import 'widgets/command_tab.dart';
 import 'widgets/lg_action_buttons.dart';
+import 'widgets/lg_connection_header.dart';
 import 'widgets/lg_error_card.dart';
 import 'widgets/lg_text_field.dart';
+import '../../home/views/home_view.dart';
 
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
@@ -20,9 +25,38 @@ class MainNavigationShell extends StatefulWidget {
 
 class _MainNavigationShellState extends State<MainNavigationShell>
     with SingleTickerProviderStateMixin {
+  static const List<_BottomNavDestination> _destinations = [
+    _BottomNavDestination(
+      label: 'Home',
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'Search',
+      icon: Icons.search,
+      selectedIcon: Icons.search_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'Auth',
+      icon: Icons.vpn_key_outlined,
+      selectedIcon: Icons.vpn_key_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'Settings',
+      icon: Icons.settings_outlined,
+      selectedIcon: Icons.settings_rounded,
+    ),
+    _BottomNavDestination(
+      label: 'About',
+      icon: Icons.info_outline_rounded,
+      selectedIcon: Icons.info_rounded,
+    ),
+  ];
+
   int _currentIndex =
-      3; // Default to Settings tab to showcase our implementation
+      0; // Default to Home tab
   late final SettingsViewModel _settingsViewModel;
+  late final HeritageSitesViewModel _heritageSitesViewModel;
   late final AnimationController _fadeController;
 
   @override
@@ -30,6 +64,8 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     super.initState();
     _settingsViewModel = SettingsDependencies.createViewModel();
     _settingsViewModel.loadSettings();
+    _heritageSitesViewModel = HeritageSitesDependencies.createSitesViewModel();
+    _heritageSitesViewModel.loadSites();
 
     _fadeController = AnimationController(
       vsync: this,
@@ -41,6 +77,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   @override
   void dispose() {
     _settingsViewModel.dispose();
+    _heritageSitesViewModel.dispose();
     _fadeController.dispose();
     super.dispose();
   }
@@ -57,14 +94,22 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   Widget _buildBody() {
     switch (_currentIndex) {
       case 0:
-        return const _HomeTabPlaceholder();
+        return HomeView(
+          settingsViewModel: _settingsViewModel,
+          sitesViewModel: _heritageSitesViewModel,
+        );
       case 1:
-        return SearchView(viewModel: _settingsViewModel);
+        return SearchView(
+          viewModel: _settingsViewModel,
+          sitesViewModel: _heritageSitesViewModel,
+        );
       case 2:
         return AuthView(viewModel: _settingsViewModel);
       case 3:
-      default:
         return SettingsView(viewModel: _settingsViewModel);
+      case 4:
+      default:
+        return AboutView(viewModel: _settingsViewModel);
     }
   }
 
@@ -89,34 +134,84 @@ class _MainNavigationShellState extends State<MainNavigationShell>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(32.0),
-              child: NavigationBar(
-                selectedIndex: _currentIndex,
-                onDestinationSelected: _onTabSelected,
-                backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.95),
-                elevation: 0,
-                height: 72,
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home_rounded),
-                    label: 'Home',
+              child: Material(
+                color: AppColors.surfaceContainerHigh.withValues(alpha: 0.95),
+                child: SizedBox(
+                  height: 72,
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < _destinations.length; index++)
+                        Expanded(
+                          child: _BottomNavItem(
+                            destination: _destinations[index],
+                            isSelected: _currentIndex == index,
+                            onTap: () => _onTabSelected(index),
+                          ),
+                        ),
+                    ],
                   ),
-                  NavigationDestination(
-                    icon: Icon(Icons.search),
-                    selectedIcon: Icon(Icons.search_rounded),
-                    label: 'Search',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.vpn_key_outlined),
-                    selectedIcon: Icon(Icons.vpn_key_rounded),
-                    label: 'Auth',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.settings_outlined),
-                    selectedIcon: Icon(Icons.settings_rounded),
-                    label: 'Settings',
-                  ),
-                ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomNavDestination {
+  const _BottomNavDestination({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+}
+
+class _BottomNavItem extends StatelessWidget {
+  const _BottomNavItem({
+    required this.destination,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final _BottomNavDestination destination;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: isSelected,
+      button: true,
+      label: destination.label,
+      child: Tooltip(
+        message: destination.label,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 28,
+          containedInkWell: false,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.primaryContainer
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isSelected ? destination.selectedIcon : destination.icon,
+                color: isSelected
+                    ? AppColors.onPrimaryContainer
+                    : AppColors.onSurfaceVariant,
               ),
             ),
           ),
@@ -152,10 +247,10 @@ class SettingsView extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _LgConnectionHeader(viewModel: viewModel),
+                child: LgConnectionHeader(viewModel: viewModel),
               ),
               const SizedBox(height: 26),
               TabBar(
@@ -164,10 +259,10 @@ class SettingsView extends StatelessWidget {
                 labelPadding: EdgeInsets.zero,
                 labelStyle: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 unselectedLabelStyle: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 tabs: const [
                   Tab(text: 'LG Connection'),
                   Tab(text: 'LG Commands'),
@@ -185,39 +280,6 @@ class SettingsView extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _LgConnectionHeader extends StatelessWidget {
-  const _LgConnectionHeader({required this.viewModel});
-
-  final SettingsViewModel viewModel;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: viewModel,
-      builder: (context, _) {
-        final isConnected = viewModel.state.isConnected;
-        final color = isConnected
-            ? AppColors.secondary
-            : AppColors.lgDisconnected;
-
-        return Row(
-          children: [
-            Icon(Icons.public_rounded, color: color, size: 24),
-            const SizedBox(width: 12),
-            Text(
-              isConnected ? 'LG CONNECTED' : 'LG DISCONNECTED',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }
@@ -352,7 +414,7 @@ class _ConnectionTabState extends State<ConnectionTab> {
         return Stack(
           children: [
             SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(50, 70, 50, 24),
+              padding: const EdgeInsets.fromLTRB(24, 70, 24, 24),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -619,223 +681,6 @@ class AboutTab extends StatelessWidget {
   }
 }
 
-class _HomeTabPlaceholder extends StatelessWidget {
-  const _HomeTabPlaceholder();
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Home'),
-        backgroundColor: AppColors.background,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Discover the World\'s\nHeritage',
-              style: theme.textTheme.headlineLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                height: 1.2,
-                color: AppColors.onSurface,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              height: 240,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: const LinearGradient(
-                  colors: [AppColors.primaryContainer, AppColors.background],
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
-                ),
-                border: Border.all(color: AppColors.outlineVariant),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.15,
-                      child: Image.asset(
-                        'assets/images/Unesco_App_LOGO.png',
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.secondary.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: const Text(
-                            'Featured Site',
-                            style: TextStyle(
-                              color: AppColors.secondary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Machu Picchu',
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            color: AppColors.onSurface,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'Cusco Region, Peru',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'QUICK CONNECTIONS',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.outlineVariant),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.cloud_queue_rounded,
-                    color: AppColors.primary,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Liquid Galaxy Rig status',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Text(
-                          'Go to Settings to configure the SSH connection details.',
-                          style: TextStyle(color: AppColors.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
-class _MapTabPlaceholder extends StatelessWidget {
-  const _MapTabPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Interactive Map'),
-        backgroundColor: AppColors.background,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Heritage Map',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.onSurface,
-              ),
-            ),
-            const Text(
-              'Locate UNESCO World Heritage sites globally and fly to them instantly.',
-              style: TextStyle(color: AppColors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.outlineVariant),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.map_rounded,
-                        size: 64,
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Map Visualization Sandbox',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: AppColors.onSurface,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Map details and active coordinates will load here.',
-                        style: TextStyle(color: AppColors.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

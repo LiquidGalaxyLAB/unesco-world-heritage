@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer_animation/shimmer_animation.dart';
+
 import '../../../../../core/theme/app_colors.dart';
 
 class HeritageCard extends StatelessWidget {
@@ -17,6 +20,8 @@ class HeritageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = imageUrl.trim().isNotEmpty;
+
     return Container(
       height: 180,
       width: double.infinity,
@@ -30,13 +35,37 @@ class HeritageCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // Background Image
-            Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => const Center(
-                child: Icon(Icons.image_not_supported_rounded, color: AppColors.onSurfaceVariant),
+            if (hasImage)
+              CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                placeholder: (context, url) {
+                  return Shimmer(
+                    duration: const Duration(milliseconds: 1400),
+                    color: AppColors.onSurface,
+                    colorOpacity: 0.12,
+                    child: const ColoredBox(
+                      color: AppColors.surfaceContainerHighest,
+                    ),
+                  );
+                },
+                errorWidget: (context, url, error) => const Center(
+                  child: Icon(
+                    Icons.image_not_supported_rounded,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              const ColoredBox(
+                color: AppColors.surfaceContainerHighest,
+                child: Center(
+                  child: Icon(
+                    Icons.image_not_supported_rounded,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
               ),
-            ),
             // Gradient Overlay for text readability
             DecoratedBox(
               decoration: BoxDecoration(
@@ -63,9 +92,9 @@ class HeritageCard extends StatelessWidget {
                   Text(
                     title,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppColors.onSurface,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: AppColors.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -73,9 +102,9 @@ class HeritageCard extends StatelessWidget {
                   Text(
                     location,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppColors.onSurface.withValues(alpha: 0.9),
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: AppColors.onSurface.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w700,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -83,8 +112,8 @@ class HeritageCard extends StatelessWidget {
                   Text(
                     category,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.onSurface.withValues(alpha: 0.8),
-                        ),
+                      color: AppColors.onSurface.withValues(alpha: 0.8),
+                    ),
                   ),
                 ],
               ),
@@ -96,3 +125,56 @@ class HeritageCard extends StatelessWidget {
   }
 }
 
+class HeritageCardSkeleton extends StatelessWidget {
+  const HeritageCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      duration: const Duration(milliseconds: 1400),
+      color: AppColors.onSurface,
+      colorOpacity: 0.1,
+      child: Container(
+        height: 180,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: AppColors.surfaceContainerHighest,
+        ),
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 24,
+              width: 200,
+              decoration: BoxDecoration(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 16,
+              width: 120,
+              decoration: BoxDecoration(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 14,
+              width: 80,
+              decoration: BoxDecoration(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

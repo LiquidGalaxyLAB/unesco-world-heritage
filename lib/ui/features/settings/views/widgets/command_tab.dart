@@ -25,24 +25,28 @@ class CommandTab extends StatelessWidget {
       opacity: isEnabled ? 1 : 0.72,
       child: SizedBox(
         width: double.infinity,
-        height: 84,
+        height: 56,
         child: FilledButton(
           onPressed: isEnabled ? onPressed : null,
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF343434),
+            backgroundColor: AppColors.primary,
             disabledBackgroundColor: const Color(0xFF343434),
-            foregroundColor: AppColors.onSurfaceVariant,
+            foregroundColor: AppColors.onPrimary,
             disabledForegroundColor: AppColors.onSurfaceVariant,
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(42),
-              side: const BorderSide(color: AppColors.outlineVariant),
+              borderRadius: BorderRadius.circular(28),
+              side: BorderSide(
+                color: isEnabled ? AppColors.primary : AppColors.outlineVariant,
+              ),
             ),
           ),
           child: Text(
             title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: isEnabled
+                  ? AppColors.onPrimary
+                  : AppColors.onSurfaceVariant,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -62,7 +66,7 @@ class CommandTab extends StatelessWidget {
         return Stack(
           children: [
             SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(46, 82, 46, 24),
+              padding: const EdgeInsets.fromLTRB(24, 82, 24, 24),
               child: Column(
                 children: [
                   if (state.errorMessage != null) ...[
@@ -94,14 +98,11 @@ class CommandTab extends StatelessWidget {
                   const SizedBox(height: 18),
                   _buildCommandButton(
                     context,
-                    title: 'Clean KML+ Logos',
+                    title: 'Clean KML',
                     isEnabled: isConnected,
                     onPressed: () {
-                      viewModel.sendClearKmlAndLogosCommand();
-                      _showCommandMessage(
-                        context,
-                        'Clean KML + logos command sent',
-                      );
+                      viewModel.sendClearKmlCommand();
+                      _showCommandMessage(context, 'Clean KML command sent');
                     },
                   ),
                   const SizedBox(height: 18),
@@ -117,11 +118,11 @@ class CommandTab extends StatelessWidget {
                   const SizedBox(height: 18),
                   _buildCommandButton(
                     context,
-                    title: 'Clean KML',
+                    title: 'Clean Logo',
                     isEnabled: isConnected,
                     onPressed: () {
-                      viewModel.sendClearKmlCommand();
-                      _showCommandMessage(context, 'Clean KML command sent');
+                      viewModel.sendClearLogoCommand();
+                      _showCommandMessage(context, 'Clean logo command sent');
                     },
                   ),
                 ],

@@ -8,7 +8,28 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
   UnescoSitesRepositoryImpl(this._service);
 
   final UnescoSitesService _service;
+  List<HeritageSite>? _cachedHomeSites;
   List<HeritageSite>? _cachedSites;
+
+  @override
+  Future<List<HeritageSite>> getHomeSites({int limit = 5}) async {
+    final cachedHomeSites = _cachedHomeSites;
+    if (cachedHomeSites != null && cachedHomeSites.length >= limit) {
+      return List<HeritageSite>.unmodifiable(
+        cachedHomeSites.take(limit).toList(growable: false),
+      );
+    }
+
+    final propertyIds = await _service.fetchHomeSiteIds(limit: limit);
+    final sites = <HeritageSite>[];
+    for (final propertyId in propertyIds) {
+      final dto = await _service.fetchSiteById(propertyId);
+      sites.add(_mapToDomain(dto));
+    }
+
+    _cachedHomeSites = List<HeritageSite>.unmodifiable(sites);
+    return List<HeritageSite>.unmodifiable(sites);
+  }
 
   @override
   Future<List<HeritageSite>> getAllSites() async {
@@ -23,11 +44,23 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
       sitesById[dto.propertyId] = _mapToDomain(dto);
     }
 
-    final sites = sitesById.values.toList(growable: false)
-      ..sort(_compareByNameThenId);
+    final sites = sitesById.values.toList(growable: false);
     _cachedSites = sites;
 
     return List<HeritageSite>.unmodifiable(sites);
+  }
+
+  @override
+  Future<List<HeritageSite>> getSitesPage({int offset = 0}) async {
+    final dtos = await _service.fetchSitesPage(offset: offset);
+    final sitesById = <int, HeritageSite>{};
+    for (final dto in dtos) {
+      sitesById[dto.propertyId] = _mapToDomain(dto);
+    }
+
+    return List<HeritageSite>.unmodifiable(
+      sitesById.values.toList(growable: false),
+    );
   }
 
   @override
@@ -36,7 +69,10 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
     if (cachedSites != null) {
       for (final site in cachedSites) {
         if (site.propertyId == propertyId) {
-          return site;
+          if (site.mainImageUrl.isNotEmpty && site.shortDescription.isNotEmpty) {
+            return site;
+          }
+          break;
         }
       }
     }
@@ -90,6 +126,7 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
 
   @override
   Future<void> refresh() async {
+    _cachedHomeSites = null;
     _cachedSites = null;
     await getAllSites();
   }
@@ -103,17 +140,14 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
       rawCategory: dto.rawCategory,
       latitude: dto.latitude,
       longitude: dto.longitude,
+      isoCodes: dto.isoCodes,
+      description: dto.description,
+      shortDescription: dto.shortDescription,
+      dateInscribed: dto.dateInscribed,
+      mainImageUrl: dto.mainImageUrl,
+      imageUrls: dto.imageUrls,
+      region: dto.region,
+      isDanger: dto.isDanger,
     );
-  }
-
-  int _compareByNameThenId(HeritageSite left, HeritageSite right) {
-    final nameComparison = left.name.toLowerCase().compareTo(
-          right.name.toLowerCase(),
-        );
-    if (nameComparison != 0) {
-      return nameComparison;
-    }
-
-    return left.propertyId.compareTo(right.propertyId);
   }
 }

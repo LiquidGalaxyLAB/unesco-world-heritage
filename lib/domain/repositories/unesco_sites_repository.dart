@@ -1,7 +1,11 @@
 import '../models/heritage_site.dart';
 
 abstract class UnescoSitesRepository {
+  Future<List<HeritageSite>> getHomeSites({int limit = 5});
+
   Future<List<HeritageSite>> getAllSites();
+
+  Future<List<HeritageSite>> getSitesPage({int offset = 0});
 
   Future<HeritageSite?> getSiteById(int propertyId);
 

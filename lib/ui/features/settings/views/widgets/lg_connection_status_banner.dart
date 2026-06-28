@@ -15,7 +15,7 @@ class LGConnectionStatusBanner extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isConnected
@@ -49,7 +49,7 @@ class LGConnectionStatusBanner extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: isConnected
                   ? AppColors.secondary.withValues(alpha: 0.2)
@@ -59,17 +59,17 @@ class LGConnectionStatusBanner extends StatelessWidget {
             child: Icon(
               isConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
               color: isConnected ? AppColors.secondary : AppColors.onSurfaceVariant,
-              size: 28,
+              size: 24,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   isConnected ? 'SYSTEM ACTIVE' : 'SYSTEM OFFLINE',
-                  style: theme.textTheme.titleMedium?.copyWith(
+                  style: theme.textTheme.titleSmall?.copyWith(
                     color: isConnected ? AppColors.onSecondaryContainer : AppColors.onSurface,
                     fontWeight: FontWeight.bold,
                   ),
