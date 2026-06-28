@@ -207,20 +207,22 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     try {
       final payload = await _buildLgRenderPayload();
 
-      await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
-        fileName: 'site_${widget.site.propertyId}.kml',
-        kml: payload.boundaryKml,
-        latitude: payload.cameraProfile.center.latitude,
-        longitude: payload.cameraProfile.center.longitude,
-        range: payload.cameraProfile.flyToRange,
-        orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
-        orbitKml: payload.orbitKml,
-        tilt: payload.cameraProfile.tilt,
-        startOrbitAfterRender: false,
-      );
-      await widget.settingsViewModel.renderKmlOnRightmostScreen(
-        kml: payload.balloonKml,
-      );
+      await Future.wait([
+        widget.settingsViewModel.renderKmlOnLiquidGalaxy(
+          fileName: 'site_${widget.site.propertyId}.kml',
+          kml: payload.boundaryKml,
+          latitude: payload.cameraProfile.center.latitude,
+          longitude: payload.cameraProfile.center.longitude,
+          range: payload.cameraProfile.flyToRange,
+          orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
+          orbitKml: payload.orbitKml,
+          tilt: payload.cameraProfile.tilt,
+          startOrbitAfterRender: false,
+        ),
+        widget.settingsViewModel.renderKmlOnRightmostScreen(
+          kml: payload.balloonKml,
+        ),
+      ]);
       if (mounted) {
         setState(() {
           _isOrbitActive = false;
