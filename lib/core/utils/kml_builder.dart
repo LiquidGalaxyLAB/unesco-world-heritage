@@ -458,19 +458,19 @@ class KMLBuilder {
         <bgColor>ff1b1b1b</bgColor>
         <textColor>ffffffff</textColor>
         <text><![CDATA[
-          <div style="width:700px;background:#1f1d1d;border-radius:24px;overflow:hidden;
+          <div style="width:500px;background:#1f1d1d;border-radius:24px;overflow:hidden;
                       font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
                       box-shadow:0 16px 36px rgba(0,0,0,0.42);">
             <div style="display:flex;align-items:center;gap:14px;padding:22px 22px 18px 22px;"><!--
               <h2 style="margin: 0; font-size: 25px; font-weight: 700;">ðŸ“ $title</h2>
             --></div>
             <div style="display:flex;align-items:center;gap:14px;padding:0 22px 18px 22px;">
-              <div style="font-size:32px;line-height:1;color:#ffffff;">&#128205;</div>
-              <div style="font-size:36px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
+              <div style="font-size:24px;line-height:1;color:#ffffff;">&#128205;</div>
+              <div style="font-size:26px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
             </div>
             $imageSection
             <div style="padding:22px 22px 26px 22px;">
-              <p style="margin:0;font-size:28px;line-height:1.6;color:#f0f0f0;">$safeDescription</p>
+              <p style="margin:0;font-size:20px;line-height:1.6;color:#f0f0f0;">$safeDescription</p>
             </div>
           </div>
         ]]></text>

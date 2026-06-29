@@ -61,6 +61,7 @@ class SettingsViewModel extends ChangeNotifier {
       notifyListeners();
 
       await _lgRigService.clearKml();
+      await _lgRigService.setRefresh();
       await _lgRigService.clearBalloon();
       await _lgRigService.showLogoOverlay();
     } catch (error) {

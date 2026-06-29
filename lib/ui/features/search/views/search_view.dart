@@ -210,7 +210,7 @@ class _SearchViewState extends State<SearchView> {
                 if (state.sites.isEmpty) {
                   return const SizedBox(height: 40);
                 }
-                
+
                 _updateCachedStates(state.sites);
                 final statesList = _cachedStates;
                 final selectedStates = state.selectedStates;
@@ -221,29 +221,38 @@ class _SearchViewState extends State<SearchView> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: statesList.length + 1,
-                    separatorBuilder: (context, index) => const SizedBox(width: 8),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
                     itemBuilder: (context, index) {
                       final isAllSites = index == 0;
-                      final stateName = isAllSites ? 'All Sites' : statesList[index - 1];
-                      final isSelected = isAllSites 
-                          ? selectedStates.isEmpty 
+                      final stateName = isAllSites
+                          ? 'All Sites'
+                          : statesList[index - 1];
+                      final isSelected = isAllSites
+                          ? selectedStates.isEmpty
                           : selectedStates.contains(stateName);
 
                       return ChoiceChip(
                         label: Text(
                           stateName,
                           style: TextStyle(
-                            color: isSelected 
-                                ? AppColors.onPrimaryContainer 
+                            color: isSelected
+                                ? AppColors.onPrimaryContainer
                                 : AppColors.onSurfaceVariant,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
                         ),
                         selected: isSelected,
                         showCheckmark: false,
                         selectedColor: const Color(0xFF376A7C),
-                        backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.5),
-                        side: const BorderSide(color: AppColors.outlineVariant, width: 0.5),
+                        backgroundColor: AppColors.surfaceContainerHigh
+                            .withValues(alpha: 0.5),
+                        side: const BorderSide(
+                          color: AppColors.outlineVariant,
+                          width: 0.5,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
