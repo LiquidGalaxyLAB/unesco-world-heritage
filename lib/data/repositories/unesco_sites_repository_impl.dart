@@ -12,7 +12,7 @@ class UnescoSitesRepositoryImpl implements UnescoSitesRepository {
   List<HeritageSite>? _cachedSites;
 
   @override
-  Future<List<HeritageSite>> getHomeSites({int limit = 5}) async {
+  Future<List<HeritageSite>> getHomeSites({int limit = 6}) async {
     final cachedHomeSites = _cachedHomeSites;
     if (cachedHomeSites != null && cachedHomeSites.length >= limit) {
       return List<HeritageSite>.unmodifiable(
