@@ -26,8 +26,12 @@ class UnescoSite {
   /// Centre [lat, lon] of the polygon bounding box.
   List<double> get centre {
     if (coordinates.isEmpty) return [0, 0];
-    final lat = coordinates.map((c) => c[1]).reduce((a, b) => a + b) / coordinates.length;
-    final lon = coordinates.map((c) => c[0]).reduce((a, b) => a + b) / coordinates.length;
+    final lat =
+        coordinates.map((c) => c[1]).reduce((a, b) => a + b) /
+        coordinates.length;
+    final lon =
+        coordinates.map((c) => c[0]).reduce((a, b) => a + b) /
+        coordinates.length;
     return [lat, lon];
   }
 }
@@ -80,12 +84,16 @@ class KmlGenerators {
     if (geoType == 'Polygon') {
       final ring = rawCoords[0] as List<dynamic>;
       coords = ring
-          .map<List<double>>((p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()])
+          .map<List<double>>(
+            (p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()],
+          )
           .toList();
     } else if (geoType == 'MultiPolygon') {
       final ring = rawCoords[0][0] as List<dynamic>;
       coords = ring
-          .map<List<double>>((p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()])
+          .map<List<double>>(
+            (p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()],
+          )
           .toList();
     }
 
@@ -99,7 +107,9 @@ class KmlGenerators {
 
       if (wikiResp.statusCode == 200) {
         final wikiJson = jsonDecode(wikiResp.body) as Map<String, dynamic>;
-        imageUrl = (wikiJson['thumbnail'] as Map<String, dynamic>?)?['source'] as String?;
+        imageUrl =
+            (wikiJson['thumbnail'] as Map<String, dynamic>?)?['source']
+                as String?;
         // Use extract_html or extract – pick the first sentence only
         final extract = wikiJson['extract'] as String?;
         if (extract != null && extract.isNotEmpty) {
@@ -162,7 +172,9 @@ class KmlGenerators {
   /// 3D extruded KML — golden glowing wall at 150 m (exact Colab match).
   static String generateUnesco3dKml(UnescoSite site) {
     const double height = 150;
-    final coordStr = site.coordinates.map((p) => '${p[0]},${p[1]},$height').join(' ');
+    final coordStr = site.coordinates
+        .map((p) => '${p[0]},${p[1]},$height')
+        .join(' ');
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
   <Document>
@@ -201,13 +213,13 @@ class KmlGenerators {
     // Build the inline HTML for the balloon
     final imageHtml = site.imageUrl != null
         ? '<img src="${site.imageUrl}" '
-          'style="width:260px;height:160px;object-fit:cover;'
-          'border-radius:8px;margin-bottom:10px;display:block;"/>'
+              'style="width:260px;height:160px;object-fit:cover;'
+              'border-radius:8px;margin-bottom:10px;display:block;"/>'
         : '';
 
     final descHtml = site.description != null
         ? '<p style="color:#cccccc;font-size:12px;'
-          'line-height:1.5;margin:0;">${site.description}</p>'
+              'line-height:1.5;margin:0;">${site.description}</p>'
         : '';
 
     final coordsStr = '${centre[1]},${centre[0]},0';

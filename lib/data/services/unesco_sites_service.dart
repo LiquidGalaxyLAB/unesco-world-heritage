@@ -153,7 +153,8 @@ class UnescoSitesService {
   Future<UnescoSiteDto> _enrichSiteMetadata(UnescoSiteDto site) async {
     var resolvedSite = site;
 
-    if (resolvedSite.mainImageUrl.isEmpty && resolvedSite.imageUrls.isNotEmpty) {
+    if (resolvedSite.mainImageUrl.isEmpty &&
+        resolvedSite.imageUrls.isNotEmpty) {
       resolvedSite = resolvedSite.copyWith(
         mainImageUrl: resolvedSite.imageUrls.first,
         imageUrls: resolvedSite.imageUrls,
@@ -161,7 +162,8 @@ class UnescoSitesService {
     }
 
     String? wikipediaSummary;
-    if (resolvedSite.shortDescription.isEmpty || resolvedSite.description.isEmpty) {
+    if (resolvedSite.shortDescription.isEmpty ||
+        resolvedSite.description.isEmpty) {
       wikipediaSummary = await _wikipediaImageService.fetchShortDescription(
         resolvedSite.name,
       );
@@ -181,16 +183,19 @@ class UnescoSitesService {
       return resolvedSite;
     }
 
-    final imageUrl = await _wikipediaImageService.fetchImageUrl(resolvedSite.name);
+    final imageUrl = await _wikipediaImageService.fetchImageUrl(
+      resolvedSite.name,
+    );
     if (imageUrl == null) {
       return resolvedSite;
     }
 
     return resolvedSite.copyWith(
       mainImageUrl: imageUrl,
-      imageUrls: {imageUrl, ...resolvedSite.imageUrls}
-          .toSet()
-          .toList(growable: false),
+      imageUrls: {
+        imageUrl,
+        ...resolvedSite.imageUrls,
+      }.toSet().toList(growable: false),
     );
   }
 
@@ -235,9 +240,9 @@ class UnescoSitesService {
       queryParameters['orderByFields'] = orderByFields;
     }
 
-    return Uri.parse(_arcGisFallbackEndpoint).replace(
-      queryParameters: queryParameters,
-    );
+    return Uri.parse(
+      _arcGisFallbackEndpoint,
+    ).replace(queryParameters: queryParameters);
   }
 
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
