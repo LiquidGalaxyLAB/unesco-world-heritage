@@ -91,10 +91,14 @@ class KMLBuilder {
     required double factor,
     double overlayX = 0,
     double overlayY = 1,
-    double screenX = 0.025,
+    double screenX = 0.02,
     double screenY = 0.95,
+    double? sizeX,
+    double? sizeY,
   }) {
     final safeName = _escapeXml(name);
+    final effectiveSizeX = sizeX ?? 580;
+    final effectiveSizeY = sizeY ?? (580 * factor);
     final content =
         '''
     <name>tags</name>
@@ -113,7 +117,7 @@ class KMLBuilder {
       <overlayXY x="$overlayX" y="$overlayY" xunits="fraction" yunits="fraction"/>
       <screenXY x="$screenX" y="$screenY" xunits="fraction" yunits="fraction"/>
       <rotationXY x="0" y="0" xunits="fraction" yunits="fraction"/>
-      <size x="${554}" y="${554 * factor}" xunits="pixels" yunits="pixels"/>
+      <size x="$effectiveSizeX" y="$effectiveSizeY" xunits="pixels" yunits="pixels"/>
     </ScreenOverlay>''';
     return getKmlSkeleton(content, safeName);
   }
