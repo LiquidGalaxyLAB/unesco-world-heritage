@@ -326,11 +326,16 @@ class LGRigService {
       return;
     }
 
+    final double logoSizeX = settings.screens > 3 ? 584 : 554;
+    final double logoSizeY = settings.screens > 3 ? 584 : 500;
+
     final overlay = KMLBuilder.screenOverlayImage(
       id: 'logo',
       name: 'Logo',
       imageUrl: _logoUrl,
-      factor: 500 / 554,
+      factor: logoSizeY / logoSizeX,
+      sizeX: logoSizeX,
+      sizeY: logoSizeY,
     );
     await sendKmlToSlave(_leftmostScreen(settings.screens), overlay);
   }

@@ -61,6 +61,7 @@ class SettingsViewModel extends ChangeNotifier {
       notifyListeners();
 
       await _lgRigService.clearKml();
+      await _lgRigService.setRefresh();
       await _lgRigService.clearBalloon();
       await _lgRigService.showLogoOverlay();
     } catch (error) {
@@ -328,8 +329,9 @@ class SettingsViewModel extends ChangeNotifier {
           orbitKml.trim().isNotEmpty) {
         await _lgRigService.uploadKml(orbitFileName, orbitKml);
         await _lgRigService.appendKml(orbitFileName);
+        // Allow Google Earth time to refresh and parse the tour KML
+        await Future<void>.delayed(const Duration(seconds: 3));
         if (startOrbitAfterRender) {
-          await Future<void>.delayed(const Duration(seconds: 2));
           await _lgRigService.startOrbit();
         }
       }
