@@ -95,7 +95,7 @@ class AboutView extends StatelessWidget {
                             '⬧ The UNESCO World Heritage application provides an immersive interactive experience where users can virtually travel the globe and explore special landmarks that connect us to our shared past and the natural world.\n\n'
                             '⬧ The application features Virtual Tours, comprehensive UNESCO Site Displays, AI-driven Storytelling, instant answers to user doubts and queries, and an immersive educational experience.\n\n'
                             '⬧ It works with the Liquid Galaxy rig to seamlessly synchronize mobile exploration with dynamic screen overlays and multi-screen Google Earth flights.\n\n'
-                            '⬧ Thanks to the team of the Liquid Galaxy LAB Lleida, Headquarters of the Liquid Galaxy project: Alba, Paula, Josep, Jordi, Oriol, Sharon, Alejandro, Marc, and admin Andreu, for their continuous support on my project. Info in www.liquidgalaxy.eu\n\n\n'
+                            '⬧ Thanks to the entire Liquid Galaxy team and the headquarters team for their continuous support, guidance, and encouragement throughout my project. Info in www.liquidgalaxy.eu\n\n\n'
                             'Created & Maintained By - Saumya Bhattacharya\n'
                             'Mentors - Yash Raj Bharti, Rohit Kumar\n'
                             'Organization Admin - Andreu Ibáñez',
