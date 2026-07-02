@@ -1,4 +1,5 @@
 import '../constants/lg_constants.dart';
+import '../../domain/models/heritage_site.dart';
 
 class KMLBuilder {
   final StringBuffer _buffer = StringBuffer();
@@ -125,6 +126,7 @@ class KMLBuilder {
   static String buildBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,
+    HeritageCategory? category,
   }) {
     const double extrusionHeight = 150;
     final safeName = _escapeXml(name);
@@ -135,6 +137,31 @@ class KMLBuilder {
 
     if (normalizedRings.isEmpty) {
       return generateBlankKml(safeName);
+    }
+
+    // Category-based colors in KML AABBGGRR format:
+    // CULTURAL: #FFCC33 → ff33ccff (line), 8833ccff (poly)
+    // MIXED:    #00E5FF → ffffe500 (line), 88ffe500 (poly)
+    // NATURAL:  #39FF14 → ff14ff39 (line), 8814ff39 (poly)
+    String lineColor;
+    String polyColor;
+    switch (category) {
+      case HeritageCategory.cultural:
+        lineColor = 'ff33ccff';
+        polyColor = '8833ccff';
+        break;
+      case HeritageCategory.mixed:
+        lineColor = 'ffffe500';
+        polyColor = '88ffe500';
+        break;
+      case HeritageCategory.natural:
+        lineColor = 'ff14ff39';
+        polyColor = '8814ff39';
+        break;
+      default:
+        lineColor = 'ffebce87';
+        polyColor = '88ebce87';
+        break;
     }
 
     final outerBoundary = _buildLinearRing(
@@ -153,11 +180,11 @@ class KMLBuilder {
         '''
     <Style id="site_boundary">
       <LineStyle>
-        <color>ffebce87</color>
+        <color>$lineColor</color>
         <width>4</width>
       </LineStyle>
       <PolyStyle>
-        <color>88ebce87</color>
+        <color>$polyColor</color>
       </PolyStyle>
     </Style>
     <Placemark>

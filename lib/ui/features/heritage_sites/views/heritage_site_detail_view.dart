@@ -470,6 +470,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                   .toList(growable: false),
             )
             .toList(growable: false),
+        category: site.category,
       );
     }
 
