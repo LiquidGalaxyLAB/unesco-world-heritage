@@ -65,7 +65,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
     _mapController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted);
-      
+
     _loadMapHtml();
   }
 
@@ -394,7 +394,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     final orbitRange = bounds.isValid
         ? _calculateAdaptiveOrbitRange(bounds, center.latitude)
         : _fallbackOrbitRange(site.category);
-    final flyToRange = _clampRange(orbitRange * 0.42, min: 1800, max: 14000);
+    final flyToRange = _clampRange(orbitRange * 0.72, min: 1800, max: 320000);
 
     return _SiteCameraProfile(
       center: center,
@@ -426,7 +426,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
     final framingSpanMeters = math.max(maxSpanMeters, diagonalMeters * 0.9);
 
-    return _clampRange(framingSpanMeters * 1.1, min: 2500, max: 19000);
+    return _clampRange(framingSpanMeters * 1.22, min: 2500, max: 450000);
   }
 
   double _fallbackOrbitRange(HeritageCategory category) {
@@ -443,6 +443,12 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   }
 
   double _adaptiveTilt(double orbitRange) {
+    if (orbitRange >= 150000) {
+      return 40;
+    }
+    if (orbitRange >= 80000) {
+      return 45;
+    }
     if (orbitRange >= 25000) {
       return 50;
     }
@@ -1101,6 +1107,3 @@ class _LgRenderPayload {
   final String orbitKml;
   final String balloonKml;
 }
-
-
-

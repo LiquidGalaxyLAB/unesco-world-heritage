@@ -228,23 +228,28 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
           (point) => HeritageGeoPoint(latitude: point[0], longitude: point[1]),
         )
         .toList(growable: false);
-    final seedPoints = componentPoints.isNotEmpty
-        ? componentPoints
-        : <HeritageGeoPoint>[
-            HeritageGeoPoint(
-              latitude: site.latitude,
-              longitude: site.longitude,
-            ),
+    final rings = componentPoints.isNotEmpty
+        ? <List<HeritageGeoPoint>>[
+            _buildFallbackRing(componentPoints, site.rawCategory),
+          ]
+        : <List<HeritageGeoPoint>>[
+            _buildFallbackRing(<HeritageGeoPoint>[
+              HeritageGeoPoint(
+                latitude: site.latitude,
+                longitude: site.longitude,
+              ),
+            ], site.rawCategory),
           ];
-
-    final ring = _buildFallbackRing(seedPoints, site.rawCategory);
-    if (ring.isEmpty) {
+    final validRings = rings
+        .where((ring) => ring.isNotEmpty)
+        .toList(growable: false);
+    if (validRings.isEmpty) {
       return null;
     }
 
     return HeritageSiteGeometry(
       propertyId: propertyId,
-      boundary: HeritagePolygonGeometry(rings: <List<HeritageGeoPoint>>[ring]),
+      boundary: HeritagePolygonGeometry(rings: validRings),
     );
   }
 
