@@ -145,6 +145,13 @@ class UnescoSitesService {
     return _enrichSiteMetadata(sites.first);
   }
 
+  Future<List<List<double>>> fetchSiteComponentCoordinates(
+    int propertyId,
+  ) async {
+    final json = await _getJson(_buildRecordByIdUri(propertyId));
+    return _parseComponentCoordinates(json);
+  }
+
   Future<_PageResult> _addMissingImages(_PageResult result) async {
     final sites = await Future.wait(result.sites.map(_enrichSiteMetadata));
     return _PageResult(sites, result.rawCount, totalCount: result.totalCount);
@@ -316,6 +323,73 @@ class UnescoSitesService {
       }
     }
     return _PageResult(parsedSites, features.length);
+  }
+
+  List<List<double>> _parseComponentCoordinates(Map<String, dynamic> json) {
+    final records = json['results'];
+    if (records is! List || records.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    final firstRecord = records.first;
+    if (firstRecord is! Map) {
+      return const <List<double>>[];
+    }
+
+    final record = Map<String, dynamic>.from(firstRecord);
+    final componentsList = record['components_list'];
+    final coordinates = <List<double>>[];
+
+    if (componentsList is String && componentsList.trim().isNotEmpty) {
+      final componentPattern = RegExp(r'\{[^{}]+\}');
+      final latitudePattern = RegExp(
+        r'latitude:\s*(-?\d+(?:\.\d+)?)',
+        caseSensitive: false,
+      );
+      final longitudePattern = RegExp(
+        r'longitude:\s*(-?\d+(?:\.\d+)?)',
+        caseSensitive: false,
+      );
+
+      for (final match in componentPattern.allMatches(componentsList)) {
+        final component = match.group(0);
+        if (component == null) {
+          continue;
+        }
+
+        final latitude = double.tryParse(
+          latitudePattern.firstMatch(component)?.group(1) ?? '',
+        );
+        final longitude = double.tryParse(
+          longitudePattern.firstMatch(component)?.group(1) ?? '',
+        );
+        if (latitude == null || longitude == null) {
+          continue;
+        }
+
+        coordinates.add(<double>[latitude, longitude]);
+      }
+    }
+
+    if (coordinates.isNotEmpty) {
+      return List<List<double>>.unmodifiable(coordinates);
+    }
+
+    final recordCoordinates = record['coordinates'];
+    if (recordCoordinates is Map) {
+      final normalizedCoordinates = Map<String, dynamic>.from(
+        recordCoordinates,
+      );
+      final latitude = normalizedCoordinates['lat'];
+      final longitude = normalizedCoordinates['lon'];
+      if (latitude is num && longitude is num) {
+        return List<List<double>>.unmodifiable(<List<double>>[
+          <double>[latitude.toDouble(), longitude.toDouble()],
+        ]);
+      }
+    }
+
+    return const <List<double>>[];
   }
 }
 

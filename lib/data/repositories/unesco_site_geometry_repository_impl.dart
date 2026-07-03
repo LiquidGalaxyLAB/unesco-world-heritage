@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../domain/models/heritage_site_geometry.dart';
 import '../../domain/repositories/unesco_site_geometry_repository.dart';
 import 'package:string_similarity/string_similarity.dart';
@@ -26,6 +28,9 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
   final Map<int, HeritageSiteGeometry> _cachedGeometries =
       <int, HeritageSiteGeometry>{};
   static const double _wdpaMatchThreshold = 0.75;
+  static const int _fallbackRingPointCount = 72;
+  static const double _fallbackEllipsePadding = 1.55;
+  static const double _minimumLongitudeScale = 0.2;
 
   @override
   Future<Set<int>> getArcGisGeometrySiteIds() async {
@@ -74,8 +79,18 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
       }
     }
 
+    if (site != null) {
+      final geometry = await _fetchComponentFallbackGeometry(site, propertyId);
+      if (geometry != null) {
+        _cachedGeometries[propertyId] = geometry;
+        return geometry;
+      }
+    }
+
     final geminiService = _geminiGeometryService;
-    if (site != null && geminiService != null && await geminiService.isConfigured) {
+    if (site != null &&
+        geminiService != null &&
+        await geminiService.isConfigured) {
       final geminiGeometries = await _fetchOrEmpty(
         () => geminiService.fetchGeneratedGeometry(
           propertyId: propertyId,
@@ -195,6 +210,60 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
     );
   }
 
+  Future<HeritageSiteGeometry?> _fetchComponentFallbackGeometry(
+    UnescoSiteDto site,
+    int propertyId,
+  ) async {
+    final sitesService = _sitesService;
+    if (sitesService == null) {
+      return null;
+    }
+
+    final coordinates = await _fetchComponentCoordinatesOrEmpty(
+      propertyId,
+      sitesService,
+    );
+    final componentPoints = coordinates
+        .map(
+          (point) => HeritageGeoPoint(latitude: point[0], longitude: point[1]),
+        )
+        .toList(growable: false);
+    final rings = componentPoints.isNotEmpty
+        ? <List<HeritageGeoPoint>>[
+            _buildFallbackRing(componentPoints, site.rawCategory),
+          ]
+        : <List<HeritageGeoPoint>>[
+            _buildFallbackRing(<HeritageGeoPoint>[
+              HeritageGeoPoint(
+                latitude: site.latitude,
+                longitude: site.longitude,
+              ),
+            ], site.rawCategory),
+          ];
+    final validRings = rings
+        .where((ring) => ring.isNotEmpty)
+        .toList(growable: false);
+    if (validRings.isEmpty) {
+      return null;
+    }
+
+    return HeritageSiteGeometry(
+      propertyId: propertyId,
+      boundary: HeritagePolygonGeometry(rings: validRings),
+    );
+  }
+
+  Future<List<List<double>>> _fetchComponentCoordinatesOrEmpty(
+    int propertyId,
+    UnescoSitesService sitesService,
+  ) async {
+    try {
+      return await sitesService.fetchSiteComponentCoordinates(propertyId);
+    } on UnescoSitesException {
+      return const <List<double>>[];
+    }
+  }
+
   Future<List<WdpaSiteCandidateDto>> _fetchWdpaCandidates() async {
     final existingFuture = _wdpaCandidatesFuture;
     if (existingFuture != null) {
@@ -280,6 +349,119 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
           (point) => HeritageGeoPoint(latitude: point[0], longitude: point[1]),
         )
         .toList(growable: false);
+  }
+
+  List<HeritageGeoPoint> _buildFallbackRing(
+    List<HeritageGeoPoint> points,
+    String rawCategory,
+  ) {
+    if (points.isEmpty) {
+      return const <HeritageGeoPoint>[];
+    }
+
+    final minimumRadiusMeters = _minimumRadiusMeters(rawCategory);
+    if (points.length == 1) {
+      final point = points.first;
+      return _buildEllipseRing(
+        centerLatitude: point.latitude,
+        centerLongitude: point.longitude,
+        semiMajorMeters: minimumRadiusMeters,
+        semiMinorMeters: minimumRadiusMeters,
+      );
+    }
+
+    double minLatitude = double.infinity;
+    double maxLatitude = double.negativeInfinity;
+    double minLongitude = double.infinity;
+    double maxLongitude = double.negativeInfinity;
+
+    for (final point in points) {
+      minLatitude = math.min(minLatitude, point.latitude);
+      maxLatitude = math.max(maxLatitude, point.latitude);
+      minLongitude = math.min(minLongitude, point.longitude);
+      maxLongitude = math.max(maxLongitude, point.longitude);
+    }
+
+    final centerLatitude = (minLatitude + maxLatitude) / 2;
+    final centerLongitude = (minLongitude + maxLongitude) / 2;
+    final longitudeScale = math.max(
+      _minimumLongitudeScale,
+      math.cos(centerLatitude * math.pi / 180).abs(),
+    );
+    final metersPerLatitudeDegree = 111320.0;
+    final metersPerLongitudeDegree = metersPerLatitudeDegree * longitudeScale;
+
+    double maxLatitudeOffsetMeters = 0;
+    double maxLongitudeOffsetMeters = 0;
+    for (final point in points) {
+      maxLatitudeOffsetMeters = math.max(
+        maxLatitudeOffsetMeters,
+        (point.latitude - centerLatitude).abs() * metersPerLatitudeDegree,
+      );
+      maxLongitudeOffsetMeters = math.max(
+        maxLongitudeOffsetMeters,
+        (point.longitude - centerLongitude).abs() * metersPerLongitudeDegree,
+      );
+    }
+
+    final radiusMeters = math.max(
+      math.max(maxLongitudeOffsetMeters, maxLatitudeOffsetMeters) *
+          _fallbackEllipsePadding,
+      minimumRadiusMeters,
+    );
+
+    return _buildEllipseRing(
+      centerLatitude: centerLatitude,
+      centerLongitude: centerLongitude,
+      semiMajorMeters: radiusMeters,
+      semiMinorMeters: radiusMeters,
+    );
+  }
+
+  List<HeritageGeoPoint> _buildEllipseRing({
+    required double centerLatitude,
+    required double centerLongitude,
+    required double semiMajorMeters,
+    required double semiMinorMeters,
+  }) {
+    final longitudeScale = math.max(
+      _minimumLongitudeScale,
+      math.cos(centerLatitude * math.pi / 180).abs(),
+    );
+    final metersPerLatitudeDegree = 111320.0;
+    final metersPerLongitudeDegree = metersPerLatitudeDegree * longitudeScale;
+
+    final ring = <HeritageGeoPoint>[];
+    for (var index = 0; index < _fallbackRingPointCount; index++) {
+      final angle = (2 * math.pi * index) / _fallbackRingPointCount;
+      final latitude =
+          centerLatitude +
+          (semiMinorMeters * math.sin(angle) / metersPerLatitudeDegree);
+      final longitude =
+          centerLongitude +
+          (semiMajorMeters * math.cos(angle) / metersPerLongitudeDegree);
+      ring.add(HeritageGeoPoint(latitude: latitude, longitude: longitude));
+    }
+
+    if (ring.isNotEmpty) {
+      ring.add(ring.first);
+    }
+
+    return List<HeritageGeoPoint>.unmodifiable(ring);
+  }
+
+  double _minimumRadiusMeters(String rawCategory) {
+    final normalizedCategory = rawCategory.trim().toLowerCase();
+    switch (normalizedCategory) {
+      case 'natural':
+        return 2200;
+      case 'mixed':
+        return 1800;
+      case 'cultural':
+        return 1200;
+      default:
+        return 1500;
+    }
   }
 }
 

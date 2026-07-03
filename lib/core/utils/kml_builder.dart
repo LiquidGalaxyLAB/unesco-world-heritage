@@ -1,7 +1,13 @@
+import 'dart:math' as math;
+
 import '../constants/lg_constants.dart';
 import '../../domain/models/heritage_site.dart';
 
 class KMLBuilder {
+  static const int _denseComponentThreshold = 200;
+  static const int _denseComponentRenderLimit = 120;
+  static const int _denseCirclePointCount = 72;
+
   final StringBuffer _buffer = StringBuffer();
   bool _hasHeader = false;
 
@@ -139,6 +145,11 @@ class KMLBuilder {
       return generateBlankKml(safeName);
     }
 
+    final components = _buildPolygonComponents(normalizedRings);
+    if (components.isEmpty) {
+      return generateBlankKml(safeName);
+    }
+
     // Category-based colors in KML AABBGGRR format:
     // CULTURAL: #FFCC33 → ff33ccff (line), 8833ccff (poly)
     // MIXED:    #00E5FF → ffffe500 (line), 88ffe500 (poly)
@@ -164,17 +175,51 @@ class KMLBuilder {
         break;
     }
 
-    final outerBoundary = _buildLinearRing(
-      normalizedRings.first,
-      altitude: extrusionHeight,
+    final isDenseSite = components.length > _denseComponentThreshold;
+    final renderedComponents = isDenseSite
+        ? _sampleComponentsForDenseSite(
+            components,
+            limit: _denseComponentRenderLimit,
+          )
+        : components;
+    final placemarks = <String>[];
+    for (var index = 0; index < renderedComponents.length; index++) {
+      final component = renderedComponents[index];
+      final outerBoundary = _buildLinearRing(
+        component.outerRing,
+        altitude: extrusionHeight,
+      );
+      final innerBoundaries = component.innerRings
+          .map(
+            (ring) =>
+                '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
+          )
+          .join();
+
+      placemarks.add('''
+    <Placemark>
+      <name>${index == 0 ? safeName : '$safeName ${index + 1}'}</name>
+      <styleUrl>#site_boundary</styleUrl>
+      <Polygon>
+        <extrude>1</extrude>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>$outerBoundary</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+        $innerBoundaries
+      </Polygon>
+    </Placemark>''');
+    }
+
+    final trajectory = _buildTrajectoryPlacemark(
+      name: safeName,
+      components: components,
     );
-    final innerBoundaries = normalizedRings
-        .skip(1)
-        .map(
-          (ring) =>
-              '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
-        )
-        .join();
+    final denseSiteCircle = isDenseSite
+        ? _buildDenseSiteCirclePlacemark(name: safeName, components: components)
+        : '';
 
     final content =
         '''
@@ -187,20 +232,27 @@ class KMLBuilder {
         <color>$polyColor</color>
       </PolyStyle>
     </Style>
-    <Placemark>
-      <name>$safeName</name>
-      <styleUrl>#site_boundary</styleUrl>
-      <Polygon>
-        <extrude>1</extrude>
-        <altitudeMode>relativeToGround</altitudeMode>
-        <outerBoundaryIs>
-          <LinearRing>
-            <coordinates>$outerBoundary</coordinates>
-          </LinearRing>
-        </outerBoundaryIs>
-        $innerBoundaries
-      </Polygon>
-    </Placemark>''';
+    <Style id="site_trajectory">
+      <LineStyle>
+        <color>ff9af7ff</color>
+        <width>3</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>00ffffff</color>
+      </PolyStyle>
+    </Style>
+    <Style id="site_boundary_circle">
+      <LineStyle>
+        <color>ff66f2ff</color>
+        <width>5</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>1a66f2ff</color>
+      </PolyStyle>
+    </Style>
+    $denseSiteCircle
+    ${placemarks.join()}
+    $trajectory''';
 
     return getKmlSkeleton(content, safeName);
   }
@@ -603,4 +655,389 @@ class KMLBuilder {
         )
         .join(' ');
   }
+
+  static List<_PolygonComponent> _buildPolygonComponents(
+    List<List<List<double>>> rings,
+  ) {
+    final descriptors = rings
+        .map(_RingDescriptor.fromRing)
+        .where((descriptor) => descriptor.ring.length >= 4)
+        .toList(growable: false);
+    if (descriptors.isEmpty) {
+      return const <_PolygonComponent>[];
+    }
+
+    final sortedDescriptors = descriptors.toList(growable: true)
+      ..sort((a, b) => b.absoluteArea.compareTo(a.absoluteArea));
+
+    final components = <_PolygonComponentBuilder>[];
+    for (final descriptor in sortedDescriptors) {
+      _PolygonComponentBuilder? parent;
+      for (final candidate in components) {
+        if (_isRingInsideOuterRing(descriptor, candidate.outer) &&
+            descriptor.orientation != candidate.outer.orientation) {
+          parent = candidate;
+          break;
+        }
+      }
+
+      if (parent == null) {
+        components.add(_PolygonComponentBuilder(outer: descriptor));
+      } else {
+        parent.innerRings.add(descriptor.ring);
+      }
+    }
+
+    return components
+        .map(
+          (component) => _PolygonComponent(
+            outerRing: component.outer.ring,
+            innerRings: List<List<List<double>>>.unmodifiable(
+              component.innerRings,
+            ),
+            centroid: component.outer.centroid,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  static bool _isRingInsideOuterRing(
+    _RingDescriptor ring,
+    _RingDescriptor outerRing,
+  ) {
+    if (ring.minLatitude < outerRing.minLatitude ||
+        ring.maxLatitude > outerRing.maxLatitude ||
+        ring.minLongitude < outerRing.minLongitude ||
+        ring.maxLongitude > outerRing.maxLongitude) {
+      return false;
+    }
+
+    return _pointInPolygon(point: ring.ring.first, ring: outerRing.ring);
+  }
+
+  static bool _pointInPolygon({
+    required List<double> point,
+    required List<List<double>> ring,
+  }) {
+    if (ring.length < 4) {
+      return false;
+    }
+
+    final latitude = point[0];
+    final longitude = point[1];
+    var isInside = false;
+
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      final currentLatitude = ring[i][0];
+      final currentLongitude = ring[i][1];
+      final previousLatitude = ring[j][0];
+      final previousLongitude = ring[j][1];
+      final crossesLatitude =
+          (currentLatitude > latitude) != (previousLatitude > latitude);
+      if (!crossesLatitude) {
+        continue;
+      }
+
+      final intersectionLongitude =
+          ((previousLongitude - currentLongitude) *
+              (latitude - currentLatitude) /
+              (previousLatitude - currentLatitude)) +
+          currentLongitude;
+      if (longitude < intersectionLongitude) {
+        isInside = !isInside;
+      }
+    }
+
+    return isInside;
+  }
+
+  static String _buildTrajectoryPlacemark({
+    required String name,
+    required List<_PolygonComponent> components,
+  }) {
+    if (components.length < 2) {
+      return '';
+    }
+
+    final orderedComponents = _orderComponentsForTrajectory(components);
+    final coordinates = orderedComponents
+        .map(
+          (component) =>
+              '${component.centroid[1]},${component.centroid[0]},220.0',
+        )
+        .join(' ');
+
+    return '''
+    <Placemark>
+      <name>$name trajectory</name>
+      <styleUrl>#site_trajectory</styleUrl>
+      <LineString>
+        <extrude>1</extrude>
+        <tessellate>1</tessellate>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <coordinates>$coordinates</coordinates>
+      </LineString>
+    </Placemark>''';
+  }
+
+  static List<_PolygonComponent> _orderComponentsForTrajectory(
+    List<_PolygonComponent> components,
+  ) {
+    var minLatitude = double.infinity;
+    var maxLatitude = double.negativeInfinity;
+    var minLongitude = double.infinity;
+    var maxLongitude = double.negativeInfinity;
+    for (final component in components) {
+      minLatitude = minLatitude < component.centroid[0]
+          ? minLatitude
+          : component.centroid[0];
+      maxLatitude = maxLatitude > component.centroid[0]
+          ? maxLatitude
+          : component.centroid[0];
+      minLongitude = minLongitude < component.centroid[1]
+          ? minLongitude
+          : component.centroid[1];
+      maxLongitude = maxLongitude > component.centroid[1]
+          ? maxLongitude
+          : component.centroid[1];
+    }
+
+    final orderByLongitude =
+        (maxLongitude - minLongitude).abs() >=
+        (maxLatitude - minLatitude).abs();
+    final orderedComponents = components.toList(growable: true)
+      ..sort((a, b) {
+        if (orderByLongitude) {
+          final longitudeCompare = a.centroid[1].compareTo(b.centroid[1]);
+          if (longitudeCompare != 0) {
+            return longitudeCompare;
+          }
+          return a.centroid[0].compareTo(b.centroid[0]);
+        }
+
+        final latitudeCompare = a.centroid[0].compareTo(b.centroid[0]);
+        if (latitudeCompare != 0) {
+          return latitudeCompare;
+        }
+        return a.centroid[1].compareTo(b.centroid[1]);
+      });
+
+    return List<_PolygonComponent>.unmodifiable(orderedComponents);
+  }
+
+  static List<_PolygonComponent> _sampleComponentsForDenseSite(
+    List<_PolygonComponent> components, {
+    required int limit,
+  }) {
+    if (components.length <= limit) {
+      return components;
+    }
+
+    final orderedComponents = _orderComponentsForTrajectory(components);
+    final step = math.max(1, (orderedComponents.length / limit).ceil());
+    final sampled = <_PolygonComponent>[];
+    for (
+      var index = 0;
+      index < orderedComponents.length && sampled.length < limit - 1;
+      index += step
+    ) {
+      sampled.add(orderedComponents[index]);
+    }
+
+    final lastComponent = orderedComponents.last;
+    if (sampled.isEmpty || !identical(sampled.last, lastComponent)) {
+      sampled.add(lastComponent);
+    }
+
+    return List<_PolygonComponent>.unmodifiable(sampled);
+  }
+
+  static String _buildDenseSiteCirclePlacemark({
+    required String name,
+    required List<_PolygonComponent> components,
+  }) {
+    final extent = _computeComponentCentroidExtent(components);
+    if (!extent.isValid) {
+      return '';
+    }
+
+    final latitudeRadius = math.max(
+      (extent.maxLatitude - extent.minLatitude) / 2,
+      0.005,
+    );
+    final longitudeRadius = math.max(
+      (extent.maxLongitude - extent.minLongitude) / 2,
+      0.005,
+    );
+    final expandedLatitudeRadius = latitudeRadius * 1.02;
+    final expandedLongitudeRadius = longitudeRadius * 1.02;
+
+    final ring = <List<double>>[];
+    for (var index = 0; index < _denseCirclePointCount; index++) {
+      final angle = (2 * math.pi * index) / _denseCirclePointCount;
+      ring.add(<double>[
+        extent.centerLatitude + (expandedLatitudeRadius * math.sin(angle)),
+        extent.centerLongitude + (expandedLongitudeRadius * math.cos(angle)),
+      ]);
+    }
+    if (ring.isNotEmpty) {
+      ring.add(ring.first);
+    }
+
+    final coordinates = _buildLinearRing(ring, altitude: 120);
+    return '''
+    <Placemark>
+      <name>$name overview</name>
+      <styleUrl>#site_boundary_circle</styleUrl>
+      <Polygon>
+        <extrude>1</extrude>
+        <tessellate>1</tessellate>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>$coordinates</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>''';
+  }
+
+  static _SiteExtent _computeComponentCentroidExtent(
+    List<_PolygonComponent> components,
+  ) {
+    var minLatitude = double.infinity;
+    var maxLatitude = double.negativeInfinity;
+    var minLongitude = double.infinity;
+    var maxLongitude = double.negativeInfinity;
+
+    for (final component in components) {
+      minLatitude = math.min(minLatitude, component.centroid[0]);
+      maxLatitude = math.max(maxLatitude, component.centroid[0]);
+      minLongitude = math.min(minLongitude, component.centroid[1]);
+      maxLongitude = math.max(maxLongitude, component.centroid[1]);
+    }
+
+    if (!minLatitude.isFinite ||
+        !maxLatitude.isFinite ||
+        !minLongitude.isFinite ||
+        !maxLongitude.isFinite) {
+      return const _SiteExtent.empty();
+    }
+
+    return _SiteExtent(
+      minLatitude: minLatitude,
+      maxLatitude: maxLatitude,
+      minLongitude: minLongitude,
+      maxLongitude: maxLongitude,
+    );
+  }
+}
+
+enum _RingOrientation { clockwise, counterClockwise }
+
+class _RingDescriptor {
+  const _RingDescriptor({
+    required this.ring,
+    required this.absoluteArea,
+    required this.orientation,
+    required this.centroid,
+    required this.minLatitude,
+    required this.maxLatitude,
+    required this.minLongitude,
+    required this.maxLongitude,
+  });
+
+  factory _RingDescriptor.fromRing(List<List<double>> ring) {
+    var signedArea = 0.0;
+    var minLatitude = double.infinity;
+    var maxLatitude = double.negativeInfinity;
+    var minLongitude = double.infinity;
+    var maxLongitude = double.negativeInfinity;
+
+    for (var index = 0; index < ring.length - 1; index++) {
+      final current = ring[index];
+      final next = ring[index + 1];
+      signedArea += (current[1] * next[0]) - (next[1] * current[0]);
+    }
+
+    for (final point in ring) {
+      minLatitude = point[0] < minLatitude ? point[0] : minLatitude;
+      maxLatitude = point[0] > maxLatitude ? point[0] : maxLatitude;
+      minLongitude = point[1] < minLongitude ? point[1] : minLongitude;
+      maxLongitude = point[1] > maxLongitude ? point[1] : maxLongitude;
+    }
+
+    return _RingDescriptor(
+      ring: ring,
+      absoluteArea: signedArea.abs() / 2,
+      orientation: signedArea < 0
+          ? _RingOrientation.clockwise
+          : _RingOrientation.counterClockwise,
+      centroid: <double>[
+        (minLatitude + maxLatitude) / 2,
+        (minLongitude + maxLongitude) / 2,
+      ],
+      minLatitude: minLatitude,
+      maxLatitude: maxLatitude,
+      minLongitude: minLongitude,
+      maxLongitude: maxLongitude,
+    );
+  }
+
+  final List<List<double>> ring;
+  final double absoluteArea;
+  final _RingOrientation orientation;
+  final List<double> centroid;
+  final double minLatitude;
+  final double maxLatitude;
+  final double minLongitude;
+  final double maxLongitude;
+}
+
+class _PolygonComponentBuilder {
+  _PolygonComponentBuilder({required this.outer});
+
+  final _RingDescriptor outer;
+  final List<List<List<double>>> innerRings = <List<List<double>>>[];
+}
+
+class _PolygonComponent {
+  const _PolygonComponent({
+    required this.outerRing,
+    required this.innerRings,
+    required this.centroid,
+  });
+
+  final List<List<double>> outerRing;
+  final List<List<List<double>>> innerRings;
+  final List<double> centroid;
+}
+
+class _SiteExtent {
+  const _SiteExtent({
+    required this.minLatitude,
+    required this.maxLatitude,
+    required this.minLongitude,
+    required this.maxLongitude,
+  });
+
+  const _SiteExtent.empty()
+    : minLatitude = double.nan,
+      maxLatitude = double.nan,
+      minLongitude = double.nan,
+      maxLongitude = double.nan;
+
+  final double minLatitude;
+  final double maxLatitude;
+  final double minLongitude;
+  final double maxLongitude;
+
+  bool get isValid =>
+      minLatitude.isFinite &&
+      maxLatitude.isFinite &&
+      minLongitude.isFinite &&
+      maxLongitude.isFinite;
+
+  double get centerLatitude => (minLatitude + maxLatitude) / 2;
+  double get centerLongitude => (minLongitude + maxLongitude) / 2;
 }
