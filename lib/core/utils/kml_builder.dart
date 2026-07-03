@@ -7,6 +7,7 @@ class KMLBuilder {
   static const int _denseComponentThreshold = 200;
   static const int _denseComponentRenderLimit = 120;
   static const int _denseCirclePointCount = 72;
+  static const int _trajectoryComponentThreshold = 4;
 
   final StringBuffer _buffer = StringBuffer();
   bool _hasHeader = false;
@@ -234,7 +235,7 @@ class KMLBuilder {
     </Style>
     <Style id="site_trajectory">
       <LineStyle>
-        <color>ff9af7ff</color>
+        <color>$lineColor</color>
         <width>3</width>
       </LineStyle>
       <PolyStyle>
@@ -755,7 +756,7 @@ class KMLBuilder {
     required String name,
     required List<_PolygonComponent> components,
   }) {
-    if (components.length < 2) {
+    if (components.length <= _trajectoryComponentThreshold) {
       return '';
     }
 
