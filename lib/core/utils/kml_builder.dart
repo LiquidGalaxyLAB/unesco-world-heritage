@@ -258,6 +258,101 @@ class KMLBuilder {
     return getKmlSkeleton(content, safeName);
   }
 
+  /// Builds a 2D flat KML polygon (clampToGround) suitable for the phone app
+  /// Google Map or any 2D KML viewer.
+  ///
+  /// Unlike [buildBoundaryKml] which produces 3D extruded walls for
+  /// Liquid Galaxy, this generates ground-level flat polygons with
+  /// category-based colouring and no altitude extrusion.
+  static String build2dBoundaryKml({
+    required String name,
+    required List<List<List<double>>> rings,
+    HeritageCategory? category,
+  }) {
+    final safeName = _escapeXml(name);
+    final normalizedRings = rings
+        .map(_normalizeRing)
+        .where((ring) => ring.length >= 4)
+        .toList(growable: false);
+
+    if (normalizedRings.isEmpty) {
+      return generateBlankKml(safeName);
+    }
+
+    final components = _buildPolygonComponents(normalizedRings);
+    if (components.isEmpty) {
+      return generateBlankKml(safeName);
+    }
+
+    // Category-based colors in KML AABBGGRR format (2D variant with
+    // slightly lower fill opacity for ground overlay clarity):
+    // CULTURAL: #FFCC33 → ff33ccff (line), 6633ccff (poly)
+    // MIXED:    #00E5FF → ffffe500 (line), 66ffe500 (poly)
+    // NATURAL:  #39FF14 → ff14ff39 (line), 6614ff39 (poly)
+    String lineColor;
+    String polyColor;
+    switch (category) {
+      case HeritageCategory.cultural:
+        lineColor = 'ff33ccff';
+        polyColor = '6633ccff';
+        break;
+      case HeritageCategory.mixed:
+        lineColor = 'ffffe500';
+        polyColor = '66ffe500';
+        break;
+      case HeritageCategory.natural:
+        lineColor = 'ff14ff39';
+        polyColor = '6614ff39';
+        break;
+      default:
+        lineColor = 'ffebce87';
+        polyColor = '66ebce87';
+        break;
+    }
+
+    final placemarks = <String>[];
+    for (var index = 0; index < components.length; index++) {
+      final component = components[index];
+      final outerBoundary = _buildLinearRing(component.outerRing);
+      final innerBoundaries = component.innerRings
+          .map(
+            (ring) =>
+                '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring)}</coordinates></LinearRing></innerBoundaryIs>',
+          )
+          .join();
+
+      placemarks.add('''
+    <Placemark>
+      <name>${index == 0 ? safeName : '$safeName ${index + 1}'}</name>
+      <styleUrl>#flat_boundary</styleUrl>
+      <Polygon>
+        <tessellate>1</tessellate>
+        <altitudeMode>clampToGround</altitudeMode>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>$outerBoundary</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+        $innerBoundaries
+      </Polygon>
+    </Placemark>''');
+    }
+
+    final content = '''
+    <Style id="flat_boundary">
+      <LineStyle>
+        <color>$lineColor</color>
+        <width>3</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>$polyColor</color>
+      </PolyStyle>
+    </Style>
+    ${placemarks.join()}''';
+
+    return getKmlSkeleton(content, safeName);
+  }
+
   static String generateBlankKml(String name) {
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">

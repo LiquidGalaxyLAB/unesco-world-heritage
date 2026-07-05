@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -67,6 +68,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted);
 
     _loadMapHtml();
+    _renderBoundaryPolygonOnMap();
   }
 
   Future<void> _loadMapHtml() async {
@@ -88,15 +90,64 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   <body>
     <div id="map"></div>
     <script>
+      window.siteMap = null;
+      window.mapReady = false;
+      window.sitePolygons = [];
+      window._pendingPolygonCall = null;
+
       function initMap() {
         var location = {lat: ${widget.site.latitude}, lng: ${widget.site.longitude}};
-        var map = new google.maps.Map(document.getElementById('map'), {
+        window.siteMap = new google.maps.Map(document.getElementById('map'), {
           zoom: 7,
           center: location,
           mapTypeId: 'satellite',
           disableDefaultUI: true
         });
+        window.mapReady = true;
+        if (window._pendingPolygonCall) {
+          window._pendingPolygonCall();
+          window._pendingPolygonCall = null;
+        }
       }
+
+      window.addSitePolygons = function(ringsJson, strokeColor, fillColor, strokeOpacity, fillOpacity) {
+        function render() {
+          try {
+            var rings = JSON.parse(ringsJson);
+            var bounds = new google.maps.LatLngBounds();
+            for (var i = 0; i < rings.length; i++) {
+              var path = [];
+              for (var j = 0; j < rings[i].length; j++) {
+                var latLng = new google.maps.LatLng(rings[i][j][0], rings[i][j][1]);
+                path.push(latLng);
+                bounds.extend(latLng);
+              }
+              if (path.length > 2) {
+                var polygon = new google.maps.Polygon({
+                  paths: [path],
+                  strokeColor: strokeColor,
+                  strokeOpacity: strokeOpacity,
+                  strokeWeight: 3,
+                  fillColor: fillColor,
+                  fillOpacity: fillOpacity,
+                  map: window.siteMap
+                });
+                window.sitePolygons.push(polygon);
+              }
+            }
+            if (!bounds.isEmpty()) {
+              window.siteMap.fitBounds(bounds, 40);
+            }
+          } catch(e) {
+            console.error('Error adding polygons:', e);
+          }
+        }
+        if (window.mapReady) {
+          render();
+        } else {
+          window._pendingPolygonCall = render;
+        }
+      };
     </script>
     <script async defer
       src="https://maps.googleapis.com/maps/api/js?key=$mapsApiKey&callback=initMap">
@@ -106,6 +157,77 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 ''';
 
     await _mapController.loadHtmlString(htmlContent);
+  }
+
+  /// Fetches the site geometry and renders 2D polygon boundaries on the
+  /// phone's Google Map WebView using the Maps JavaScript API.
+  Future<void> _renderBoundaryPolygonOnMap() async {
+    try {
+      final geometry = await _getSiteGeometry();
+      if (geometry == null || geometry.boundary.isEmpty) {
+        return;
+      }
+
+      // Convert rings to coordinate arrays: [[lat, lng], ...] per ring.
+      final ringsData = geometry.boundary.rings
+          .map(
+            (ring) => ring
+                .map((point) => <double>[point.latitude, point.longitude])
+                .toList(),
+          )
+          .toList();
+
+      final ringsJson = jsonEncode(ringsData);
+      final colors = _getMapPolygonColors(widget.site.category);
+
+      // Escape single-quotes for the JS string literal.
+      final escapedJson = ringsJson.replaceAll("'", "\\'");
+
+      final jsCall = "window.addSitePolygons("
+          "'$escapedJson', "
+          "'${colors.strokeColor}', "
+          "'${colors.fillColor}', "
+          "${colors.strokeOpacity}, "
+          "${colors.fillOpacity}"
+          ");";
+
+      await _mapController.runJavaScript(jsCall);
+    } catch (e) {
+      debugPrint('Error rendering boundary polygon on map: \$e');
+    }
+  }
+
+  _MapPolygonColors _getMapPolygonColors(HeritageCategory category) {
+    switch (category) {
+      case HeritageCategory.cultural:
+        return const _MapPolygonColors(
+          strokeColor: '#FFCC33',
+          fillColor: '#FFCC33',
+          strokeOpacity: 1.0,
+          fillOpacity: 0.25,
+        );
+      case HeritageCategory.mixed:
+        return const _MapPolygonColors(
+          strokeColor: '#00E5FF',
+          fillColor: '#00E5FF',
+          strokeOpacity: 1.0,
+          fillOpacity: 0.25,
+        );
+      case HeritageCategory.natural:
+        return const _MapPolygonColors(
+          strokeColor: '#39FF14',
+          fillColor: '#39FF14',
+          strokeOpacity: 1.0,
+          fillOpacity: 0.25,
+        );
+      case HeritageCategory.unknown:
+        return const _MapPolygonColors(
+          strokeColor: '#87CEEB',
+          fillColor: '#87CEEB',
+          strokeOpacity: 1.0,
+          fillOpacity: 0.25,
+        );
+    }
   }
 
   Future<void> _fetchWeather() async {
@@ -1106,4 +1228,18 @@ class _LgRenderPayload {
   final String boundaryKml;
   final String orbitKml;
   final String balloonKml;
+}
+
+class _MapPolygonColors {
+  const _MapPolygonColors({
+    required this.strokeColor,
+    required this.fillColor,
+    required this.strokeOpacity,
+    required this.fillOpacity,
+  });
+
+  final String strokeColor;
+  final String fillColor;
+  final double strokeOpacity;
+  final double fillOpacity;
 }
