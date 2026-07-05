@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../../../domain/models/heritage_site.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
@@ -29,6 +31,9 @@ class _HomeViewState extends State<HomeView> {
   final ScrollController _scrollController = ScrollController();
   int _visibleSiteCount = _pageSize;
 
+  Position? _currentPosition;
+  bool _isLoadingLocation = true;
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +44,55 @@ class _HomeViewState extends State<HomeView> {
     _loadMapHtml();
 
     _scrollController.addListener(_loadNextPage);
+    
+    _determinePosition();
+  }
+
+  Future<void> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    try {
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) setState(() => _isLoadingLocation = false);
+        return;
+      }
+
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) setState(() => _isLoadingLocation = false);
+          return;
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _isLoadingLocation = false);
+        return;
+      }
+
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 5),
+        );
+      } catch (e) {
+        // Fallback to last known position if current position times out or fails
+        position = await Geolocator.getLastKnownPosition();
+      }
+
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+          _isLoadingLocation = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingLocation = false);
+    }
   }
 
   Future<void> _loadMapHtml() async {
@@ -173,7 +227,7 @@ class _HomeViewState extends State<HomeView> {
                     builder: (context, _) {
                       final state = widget.sitesViewModel.state;
 
-                      if (state.isLoading) {
+                      if (state.isLoading || _isLoadingLocation) {
                         return ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -186,17 +240,49 @@ class _HomeViewState extends State<HomeView> {
                         );
                       }
 
-                      if (state.homeSites.isEmpty) {
-                        return const Center(child: Text('No sites available.'));
-                      }
+                      List<HeritageSite> displaySites = [];
+                      List<int> displayDistances = [];
 
-                      final visibleSiteCount =
-                          _visibleSiteCount < state.homeSites.length
-                          ? _visibleSiteCount
-                          : state.homeSites.length;
-                      final displaySites = state.homeSites
-                          .take(visibleSiteCount)
-                          .toList(growable: false);
+                      if (_currentPosition != null && state.sites.isNotEmpty) {
+                        final sitesWithDistance = state.sites.map((site) {
+                          final distanceInMeters = Geolocator.distanceBetween(
+                            _currentPosition!.latitude,
+                            _currentPosition!.longitude,
+                            site.latitude,
+                            site.longitude,
+                          );
+                          return {
+                            'site': site,
+                            'distance': (distanceInMeters / 1000).round(),
+                          };
+                        }).toList();
+
+                        sitesWithDistance.sort((a, b) => (a['distance'] as int).compareTo(b['distance'] as int));
+                        
+                        final topSites = sitesWithDistance.take(5).toList();
+                        displaySites = topSites.map((e) => e['site'] as HeritageSite).toList();
+                        displayDistances = topSites.map((e) => e['distance'] as int).toList();
+                      } else {
+                        // Fallback to existing logic
+                        if (state.homeSites.isEmpty) {
+                          return const Center(child: Text('No sites available.'));
+                        }
+
+                        final visibleSiteCount =
+                            _visibleSiteCount < state.homeSites.length
+                            ? _visibleSiteCount
+                            : state.homeSites.length;
+                        displaySites = state.homeSites
+                            .take(visibleSiteCount)
+                            .toList(growable: false);
+                            
+                        final dummyDistances = [100, 180, 250, 310, 420];
+                        displayDistances = List.generate(displaySites.length, (index) {
+                          return index < dummyDistances.length
+                              ? dummyDistances[index]
+                              : (index + 1) * 80;
+                        });
+                      }
 
                       return ListView.separated(
                         shrinkWrap: true,
@@ -207,11 +293,7 @@ class _HomeViewState extends State<HomeView> {
                             const SizedBox(height: 16),
                         itemBuilder: (context, index) {
                           final site = displaySites[index];
-                          // Dummy distance logic for UI
-                          final dummyDistances = [100, 180, 250, 310, 420];
-                          final distance = index < dummyDistances.length
-                              ? dummyDistances[index]
-                              : (index + 1) * 80;
+                          final distance = displayDistances[index];
 
                           return GestureDetector(
                             onTap: () {
@@ -236,7 +318,7 @@ class _HomeViewState extends State<HomeView> {
                     },
                   ),
 
-                  if (_visibleSiteCount <
+                  if (_currentPosition == null && _visibleSiteCount <
                       widget.sitesViewModel.state.homeSites.length) ...[
                     const SizedBox(height: 16),
                     const Center(
