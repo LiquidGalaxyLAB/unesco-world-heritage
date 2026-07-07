@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -19,6 +20,7 @@ import '../view_models/heritage_site_detail_view_model.dart';
 import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
 import 'widgets/gemini_chat_bottom_sheet.dart';
+import '../../../../data/services/gemini_service.dart';
 
 class HeritageSiteDetailView extends StatefulWidget {
   const HeritageSiteDetailView({
@@ -313,6 +315,50 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
   }
 
+  Future<void> _playStory() async {
+    setState(() {
+      _isAudioPlaying = true;
+    });
+
+    final currentSite = _detailViewModel.state.site ?? widget.site;
+    final box = Hive.box<String>('stories');
+    final cacheKey = 'site_story_${currentSite.propertyId}';
+    
+    String? story = box.get(cacheKey);
+
+    if (story == null) {
+      try {
+        final geminiService = GeminiService();
+        final prompt = 'Tell me a short interesting narrative about ${currentSite.name}. Include what site it is, where it is located (${currentSite.country}), the best time to visit, and one interesting fact. Keep it short and engaging.';
+        final response = await geminiService.sendMessage(prompt);
+        if (response.startsWith('Error:')) {
+          story = currentSite.shortDescription.trim().isNotEmpty
+              ? currentSite.shortDescription.trim()
+              : currentSite.description.trim().isNotEmpty
+              ? currentSite.description.trim()
+              : 'No description available for this UNESCO World Heritage Site.';
+        } else {
+          story = response;
+          await box.put(cacheKey, story);
+        }
+      } catch (e) {
+        story = currentSite.shortDescription.trim().isNotEmpty
+            ? currentSite.shortDescription.trim()
+            : currentSite.description.trim().isNotEmpty
+            ? currentSite.description.trim()
+            : 'No description available for this UNESCO World Heritage Site.';
+      }
+    }
+
+    if (!mounted) return;
+    
+    if (_isAudioPlaying) {
+      await _flutterTts.setVolume(_isMuted ? 0.0 : 1.0);
+      await _flutterTts.stop();
+      await _flutterTts.speak(story!);
+    }
+  }
+
   Future<void> _handleFlyToPressed() async {
     if (_isRenderingOnLg) {
       return;
@@ -321,6 +367,31 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     if (!widget.settingsViewModel.state.isConnected) {
       _showSnackBar('Connect to Liquid Galaxy first.');
       return;
+    }
+
+    final shouldPlayStory = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerHighest,
+          title: const Text('Play Audio Story?'),
+          content: const Text('Would you like to hear an AI-generated story about this site?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('No'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldPlayStory == true) {
+      _playStory();
     }
 
     setState(() {
@@ -853,13 +924,13 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                               Expanded(
                                 child: FilledButton.icon(
                                   onPressed: () {
-                                    setState(() {
-                                      _isAudioPlaying = !_isAudioPlaying;
-                                    });
                                     if (_isAudioPlaying) {
-                                      _flutterTts.speak(currentSite.description);
-                                    } else {
+                                      setState(() {
+                                        _isAudioPlaying = false;
+                                      });
                                       _flutterTts.stop();
+                                    } else {
+                                      _playStory();
                                     }
                                   },
                                   style: FilledButton.styleFrom(
@@ -893,11 +964,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                               Expanded(
                                 child: FilledButton.icon(
                                   onPressed: () {
-                                    setState(() {
-                                      _isAudioPlaying = true;
-                                    });
                                     _flutterTts.stop();
-                                    _flutterTts.speak(currentSite.description);
+                                    _playStory();
                                   },
                                   style: FilledButton.styleFrom(
                                     backgroundColor: AppColors.surfaceVariant,
