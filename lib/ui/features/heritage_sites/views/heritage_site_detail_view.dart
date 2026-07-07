@@ -37,6 +37,7 @@ class HeritageSiteDetailView extends StatefulWidget {
 class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   String _selectedTab = 'Overview';
   bool _isAudioPlaying = false;
+  bool _isMuted = false;
   bool _isOrbitActive = false;
   bool _isLgScenePrepared = false;
   bool _isRenderingOnLg = false;
@@ -820,13 +821,10 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.3),
@@ -835,41 +833,82 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                           ),
                         ],
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              'Explore ${currentSite.name}',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: AppColors.onSurfaceVariant,
-                              ),
+                          Text(
+                            'Explore ${currentSite.name}',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: AppColors.onSurface,
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          Container(
-                            decoration: const BoxDecoration(
-                              color: AppColors.surfaceVariant,
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              icon: Icon(
-                                _isAudioPlaying
-                                    ? Icons.volume_up_rounded
-                                    : Icons.volume_off_rounded,
-                                color: AppColors.onSurface,
+                          const SizedBox(height: 16),
+                          const Divider(
+                            color: AppColors.outlineVariant,
+                            height: 1,
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _isAudioPlaying = !_isAudioPlaying;
+                                    });
+                                    if (_isAudioPlaying) {
+                                      _flutterTts.speak(currentSite.description);
+                                    } else {
+                                      _flutterTts.stop();
+                                    }
+                                  },
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: theme.colorScheme.primaryContainer,
+                                    foregroundColor: theme.colorScheme.onPrimaryContainer,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                  ),
+                                  icon: Icon(_isAudioPlaying ? Icons.pause : Icons.play_arrow),
+                                  label: Text(_isAudioPlaying ? 'Pause' : 'Play'),
+                                ),
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _isAudioPlaying = !_isAudioPlaying;
-                                });
-                                if (_isAudioPlaying) {
-                                  _flutterTts.speak(currentSite.description);
-                                } else {
-                                  _flutterTts.stop();
-                                }
-                              },
-                            ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _isMuted = !_isMuted;
+                                      _flutterTts.setVolume(_isMuted ? 0.0 : 1.0);
+                                    });
+                                  },
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.surfaceVariant,
+                                    foregroundColor: AppColors.onSurface,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                  ),
+                                  icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
+                                  label: Text(_isMuted ? 'Unmute' : 'Mute'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _isAudioPlaying = true;
+                                    });
+                                    _flutterTts.stop();
+                                    _flutterTts.speak(currentSite.description);
+                                  },
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.surfaceVariant,
+                                    foregroundColor: AppColors.onSurface,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                  ),
+                                  icon: const Icon(Icons.replay),
+                                  label: const Text('Replay'),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
