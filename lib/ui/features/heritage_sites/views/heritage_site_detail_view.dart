@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -53,6 +54,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   Future<HeritageSiteGeometry?>? _siteGeometryFuture;
   final FlutterTts _flutterTts = FlutterTts();
   VoidCallback? _detailViewModelListener;
+  String? _bestTimeToVisit;
+  // Futures cached so _buildLgRenderPayload can await them regardless of
+  // whether the UI has already received the results via setState.
+  late final Future<WeatherData?> _weatherFuture;
+  late final Future<String?> _bestTimeFuture;
 
   @override
   void initState() {
@@ -66,7 +72,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     };
     _detailViewModel.addListener(_detailViewModelListener!);
     _detailViewModel.loadSite(widget.site.propertyId);
-    _fetchWeather();
+    _weatherFuture = _fetchWeather();
+    _bestTimeFuture = _loadBestTimeToVisit();
     _initTts();
 
     _mapController = WebViewController()
@@ -110,6 +117,34 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       HeritageSitesDependencies.lgRigService,
     );
     _mapSyncService!.startSync();
+  }
+
+  /// Loads and parses [assets/whc_site_bestTimeVisit.json], then looks up
+  /// the best-time-to-visit entry whose [id_no] matches this site's [propertyId].
+  /// Returns the matched value (or null) so callers can await it directly.
+  Future<String?> _loadBestTimeToVisit() async {
+    try {
+      final raw = await rootBundle
+          .loadString('assets/whc_site_bestTimeVisit.json');
+      final list = jsonDecode(raw) as List<dynamic>;
+      final propertyIdStr = widget.site.propertyId.toString();
+      for (final entry in list) {
+        if ((entry as Map<String, dynamic>)['id_no'] == propertyIdStr) {
+          final rawTime = entry['best_time'] as String? ?? '';
+          final value = rawTime.split(',').first.trim();
+          if (mounted) {
+            setState(() {
+              _bestTimeToVisit = value;
+            });
+          }
+          return value;
+        }
+      }
+      // No match found.
+    } catch (e) {
+      debugPrint('BestTimeToVisit: failed to load – $e');
+    }
+    return null;
   }
 
   Future<void> _loadMapHtml() async {
@@ -289,7 +324,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
   }
 
-  Future<void> _fetchWeather() async {
+  Future<WeatherData?> _fetchWeather() async {
     double targetLat = widget.site.latitude;
     double targetLng = widget.site.longitude;
 
@@ -320,6 +355,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         _isLoadingWeather = false;
       });
     }
+    return data;
   }
 
   Future<HeritageSiteGeometry?> _getSiteGeometry() {
@@ -355,12 +391,25 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         : resolvedSite.description.trim().isNotEmpty
         ? resolvedSite.description.trim()
         : 'No description available for this UNESCO World Heritage Site.';
+
+    // Await both climate futures in parallel so the balloon always has data.
+    final climateResults = await Future.wait([_weatherFuture, _bestTimeFuture]);
+    final weather = climateResults[0] as WeatherData?;
+    final bestTime = climateResults[1] as String?;
+
     final balloonKml = KMLBuilder.createSiteInfoBalloon(
       title: resolvedSite.name,
       description: balloonDescription,
       longitude: resolvedSite.longitude,
       latitude: resolvedSite.latitude,
       imageUrl: resolvedSite.mainImageUrl,
+      temperature: weather != null
+          ? '${weather.temperature.round()} °C'
+          : null,
+      windSpeed: weather != null
+          ? '${weather.windSpeed.round()} km/h'
+          : null,
+      bestTimeToVisit: bestTime,
     );
 
     return _LgRenderPayload(
@@ -1301,8 +1350,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
           _buildClimateCard(
             theme: theme,
             icon: Icons.travel_explore_rounded,
-            value: 'Nov - Feb',
-            label: 'Best Season',
+            value: _bestTimeToVisit ?? 'N/A',
+            label: 'Best Time to Visit',
           ),
         ],
       ),
