@@ -609,18 +609,57 @@ class KMLBuilder {
     required double longitude,
     required double latitude,
     String? imageUrl,
+    String? temperature,
+    String? windSpeed,
+    String? windDirection,
+    String? bestTimeToVisit,
   }) {
     final safeTitle = _escapeHtml(title);
     final safeTitleXml = _escapeXml(title);
-    final safeDescription = _escapeHtml(description);
+
+    // Truncate description to keep the balloon readable when a climate strip is shown.
+    final hasClimate = temperature != null || windSpeed != null || bestTimeToVisit != null;
+    final descText = hasClimate && description.length > 300
+        ? '${description.substring(0, 300).trimRight()}...'
+        : description;
+    final safeDescription = _escapeHtml(descText);
+
     final normalizedImageUrl = imageUrl?.trim() ?? '';
     final imageSection = normalizedImageUrl.isNotEmpty
         ? '''
         <div style="padding:0 18px;">
           <img src="${_escapeHtml(normalizedImageUrl)}" alt="$safeTitle"
-               style="width:100%;height:380px;display:block;object-fit:cover;border-radius:0;"/>
+               style="width:100%;height:340px;display:block;object-fit:cover;border-radius:0;"/>
         </div>
         '''
+        : '';
+
+    // 3 climate items in a single row side by side.
+    final tempCell = temperature != null
+        ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;border-right:1px solid #3a3636;">'
+          '<div style="font-size:22px;margin-bottom:6px;">&#127777;</div>'
+          '<div style="font-size:18px;font-weight:700;color:#ffffff;">$temperature</div>'
+          '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Temperature</div>'
+          '</div>'
+        : '';
+    final windCell = windSpeed != null
+        ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;border-right:1px solid #3a3636;">'
+          '<div style="font-size:22px;margin-bottom:6px;">&#127788;</div>'
+          '<div style="font-size:18px;font-weight:700;color:#ffffff;">$windSpeed</div>'
+          '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Wind Speed</div>'
+          '</div>'
+        : '';
+    final bestCell = bestTimeToVisit != null
+        ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;">'
+          '<div style="font-size:22px;margin-bottom:6px;">&#127758;</div>'
+          '<div style="font-size:18px;font-weight:700;color:#ffffff;">$bestTimeToVisit</div>'
+          '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Best Time</div>'
+          '</div>'
+        : '';
+    final climateStrip = hasClimate
+        ? '<div style="display:flex;margin:18px 18px 0 18px;border-radius:14px;overflow:hidden;border:1px solid #3a3636;">'
+          '$tempCell$windCell$bestCell'
+          '</div>'
         : '';
 
     return '''
@@ -637,13 +676,14 @@ class KMLBuilder {
                       font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
                       box-shadow:0 16px 36px rgba(0,0,0,0.42);">
             <div style="display:flex;align-items:center;gap:14px;padding:22px 22px 18px 22px;"><!--
-              <h2 style="margin: 0; font-size: 25px; font-weight: 700;">ðŸ“ $title</h2>
+              <h2 style="margin: 0; font-size: 25px; font-weight: 700;">&#128205; $title</h2>
             --></div>
             <div style="display:flex;align-items:center;gap:14px;padding:0 22px 18px 22px;">
               <div style="font-size:24px;line-height:1;color:#ffffff;">&#128205;</div>
               <div style="font-size:26px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
             </div>
             $imageSection
+            $climateStrip
             <div style="padding:22px 22px 26px 22px;">
               <p style="margin:0;font-size:20px;line-height:1.6;color:#f0f0f0;">$safeDescription</p>
             </div>
