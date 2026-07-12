@@ -7,12 +7,17 @@ import 'view_models/settings_view_model.dart';
 class SettingsDependencies {
   SettingsDependencies._();
 
+  /// Shared [LGRigService] singleton so that the SSH connection established
+  /// during the settings flow is the same instance available to all other
+  /// features (e.g. map sync).
+  static final LGRigService lgRigService = LGRigService();
+
   static SettingsViewModel createViewModel() {
     final SettingsStorageService storageService = SettingsStorageService();
-    final LGRigService lgRigService = LGRigService();
     final LGSettingsRepository repository = LGSettingsRepositoryImpl(
       storageService,
     );
     return SettingsViewModel(repository, lgRigService);
   }
 }
+

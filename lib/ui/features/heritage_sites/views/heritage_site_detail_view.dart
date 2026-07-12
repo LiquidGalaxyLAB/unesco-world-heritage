@@ -11,6 +11,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/utils/kml_builder.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/services/weather_service.dart';
+import '../../../../data/services/lg_map_sync_service.dart';
 import '../../../../domain/models/heritage_site.dart';
 import '../../../../domain/models/heritage_site_geometry.dart';
 import '../../../../domain/repositories/unesco_site_geometry_repository.dart';
@@ -46,6 +47,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   late final WebViewController _mapController;
   late final UnescoSiteGeometryRepository _geometryRepository;
   late final HeritageSiteDetailViewModel _detailViewModel;
+  LGMapSyncService? _mapSyncService;
   bool _isLoadingWeather = true;
   WeatherData? _weatherData;
   Future<HeritageSiteGeometry?>? _siteGeometryFuture;
@@ -68,10 +70,46 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     _initTts();
 
     _mapController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted);
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'MapSync',
+        onMessageReceived: _onMapCameraChanged,
+      );
 
     _loadMapHtml();
     _renderBoundaryPolygonOnMap();
+
+    // Auto-start sync if LG is already connected when this view opens.
+    if (widget.settingsViewModel.state.isConnected) {
+      _ensureMapSyncStarted();
+    }
+
+    // Auto fly-to LG when the view opens (if already connected).
+    if (widget.settingsViewModel.state.isConnected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _performFlyTo();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(HeritageSiteDetailView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final wasConnected = oldWidget.settingsViewModel.state.isConnected;
+    final isConnected = widget.settingsViewModel.state.isConnected;
+    if (!wasConnected && isConnected) {
+      _ensureMapSyncStarted();
+    } else if (wasConnected && !isConnected) {
+      _mapSyncService?.stopSync();
+    }
+  }
+
+  /// Lazily initialises the sync service and starts it.
+  void _ensureMapSyncStarted() {
+    _mapSyncService ??= LGMapSyncService(
+      HeritageSitesDependencies.lgRigService,
+    );
+    _mapSyncService!.startSync();
   }
 
   Future<void> _loadMapHtml() async {
@@ -111,6 +149,24 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
           window._pendingPolygonCall();
           window._pendingPolygonCall = null;
         }
+
+        // Listen for camera changes and send to Flutter via MapSync channel.
+        window.siteMap.addListener('idle', function() {
+          if (window.MapSync) {
+            var center = window.siteMap.getCenter();
+            var zoom = window.siteMap.getZoom();
+            var heading = window.siteMap.getHeading() || 0;
+            var tilt = window.siteMap.getTilt() || 0;
+            var payload = JSON.stringify({
+              lat: center.lat(),
+              lng: center.lng(),
+              zoom: zoom,
+              heading: heading,
+              tilt: tilt
+            });
+            window.MapSync.postMessage(payload);
+          }
+        });
       }
 
       window.addSitePolygons = function(ringsJson, strokeColor, fillColor, strokeOpacity, fillOpacity) {
@@ -359,40 +415,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
   }
 
-  Future<void> _handleFlyToPressed() async {
-    if (_isRenderingOnLg) {
-      return;
-    }
-
-    if (!widget.settingsViewModel.state.isConnected) {
-      _showSnackBar('Connect to Liquid Galaxy first.');
-      return;
-    }
-
-    final shouldPlayStory = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surfaceContainerHighest,
-          title: const Text('Play Audio Story?'),
-          content: const Text('Would you like to hear an AI-generated story about this site?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('No'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Yes'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldPlayStory == true) {
-      _playStory();
-    }
+  /// Core LG render logic shared by both the automatic trigger and any
+  /// manual invocations. Does NOT show dialogs.
+  Future<void> _performFlyTo() async {
+    if (_isRenderingOnLg) return;
+    if (!widget.settingsViewModel.state.isConnected) return;
 
     setState(() {
       _isRenderingOnLg = true;
@@ -434,6 +461,42 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
   }
 
+  Future<void> _handleFlyToPressed() async {
+    if (_isRenderingOnLg) return;
+
+    if (!widget.settingsViewModel.state.isConnected) {
+      _showSnackBar('Connect to Liquid Galaxy first.');
+      return;
+    }
+
+    final shouldPlayStory = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerHighest,
+          title: const Text('Play Audio Story?'),
+          content: const Text('Would you like to hear an AI-generated story about this site?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('No'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldPlayStory == true) {
+      _playStory();
+    }
+
+    await _performFlyTo();
+  }
+
   Future<void> _handleOrbitPressed() async {
     if (_isRenderingOnLg) {
       return;
@@ -452,6 +515,36 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     if (!_isLgScenePrepared) {
       _showSnackBar('Tap Fly To first.');
       return;
+    }
+
+    // Ask whether to play the audio story alongside the orbit.
+    final shouldPlayStory = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerHighest,
+          title: const Text('Play Audio Story?'),
+          content: const Text(
+            'Would you like to hear an AI-generated story about this site while orbiting?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('No'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    if (shouldPlayStory == true) {
+      _playStory();
     }
 
     setState(() {
@@ -720,8 +813,30 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     });
   }
 
+  /// Handles incoming camera position updates from the WebView map.
+  /// Sync is always active when LG is connected – no manual toggle needed.
+  void _onMapCameraChanged(JavaScriptMessage message) {
+    final syncService = _mapSyncService;
+    if (syncService == null) return;
+
+    try {
+      final data = jsonDecode(message.message) as Map<String, dynamic>;
+      syncService.onCameraChanged(
+        latitude: (data['lat'] as num).toDouble(),
+        longitude: (data['lng'] as num).toDouble(),
+        zoom: (data['zoom'] as num).toDouble(),
+        heading: (data['heading'] as num?)?.toDouble() ?? 0,
+        tilt: (data['tilt'] as num?)?.toDouble() ?? 0,
+      );
+    } catch (e) {
+      debugPrint('MapSync: failed to parse camera data – $e');
+    }
+  }
+
+
   @override
   void dispose() {
+    _mapSyncService?.dispose();
     _flutterTts.stop();
     final listener = _detailViewModelListener;
     if (listener != null) {
@@ -770,16 +885,6 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                         bottom: 16,
                         child: Row(
                           children: [
-                            _buildLgActionButton(
-                              icon: _isRenderingOnLg
-                                  ? Icons.hourglass_top_rounded
-                                  : Icons.flight_takeoff_rounded,
-                              label: 'Fly To',
-                              onPressed: _isRenderingOnLg
-                                  ? null
-                                  : _handleFlyToPressed,
-                            ),
-                            const SizedBox(width: 10),
                             _buildLgActionButton(
                               icon: _isRenderingOnLg
                                   ? Icons.hourglass_top_rounded
