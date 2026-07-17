@@ -320,6 +320,7 @@ class _SearchViewState extends State<SearchView> {
                           location: site.country,
                           imageUrl: site.mainImageUrl,
                           category: site.rawCategory,
+                          siteName: site.name,
                         ),
                       );
                     },

@@ -44,7 +44,7 @@ class _HomeViewState extends State<HomeView> {
     _loadMapHtml();
 
     _scrollController.addListener(_loadNextPage);
-    
+
     _determinePosition();
   }
 
@@ -89,6 +89,14 @@ class _HomeViewState extends State<HomeView> {
           _currentPosition = position;
           _isLoadingLocation = false;
         });
+        // Push the resolved coordinates into the session-level VM cache.
+        // position may be null if getLastKnownPosition() returned nothing.
+        if (position != null) {
+          widget.sitesViewModel.updateUserLocation(
+            position.latitude,
+            position.longitude,
+          );
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingLocation = false);
@@ -227,7 +235,12 @@ class _HomeViewState extends State<HomeView> {
                     builder: (context, _) {
                       final state = widget.sitesViewModel.state;
 
-                      if (state.isLoading || _isLoadingLocation) {
+                      // Show shimmer until both the full dataset AND GPS are
+                      // ready so nearest sites can be computed correctly.
+                      // Skip shimmer immediately if we have session-cached
+                      // nearest sites (navigating back = instant display).
+                      if ((state.isLoading || _isLoadingLocation || !state.allSitesLoaded) &&
+                          state.nearestSites.isEmpty) {
                         return ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -240,34 +253,19 @@ class _HomeViewState extends State<HomeView> {
                         );
                       }
 
-                      List<HeritageSite> displaySites = [];
-                      List<int> displayDistances = [];
+                      // Use session-cached nearest sites from the VM.
+                      final List<HeritageSite> displaySites;
+                      final List<int> displayDistances;
 
-                      if (_currentPosition != null && state.sites.isNotEmpty) {
-                        final sitesWithDistance = state.sites.map((site) {
-                          final distanceInMeters = Geolocator.distanceBetween(
-                            _currentPosition!.latitude,
-                            _currentPosition!.longitude,
-                            site.latitude,
-                            site.longitude,
-                          );
-                          return {
-                            'site': site,
-                            'distance': (distanceInMeters / 1000).round(),
-                          };
-                        }).toList();
-
-                        sitesWithDistance.sort((a, b) => (a['distance'] as int).compareTo(b['distance'] as int));
-                        
-                        final topSites = sitesWithDistance.take(5).toList();
-                        displaySites = topSites.map((e) => e['site'] as HeritageSite).toList();
-                        displayDistances = topSites.map((e) => e['distance'] as int).toList();
+                      if (state.nearestSites.isNotEmpty) {
+                        displaySites = state.nearestSites;
+                        displayDistances = state.nearestDistancesKm;
                       } else {
-                        // Fallback to existing logic
+                        // Fallback: GPS unavailable — show homeSites.
                         if (state.homeSites.isEmpty) {
-                          return const Center(child: Text('No sites available.'));
+                          return const Center(
+                              child: Text('No sites available.'));
                         }
-
                         final visibleSiteCount =
                             _visibleSiteCount < state.homeSites.length
                             ? _visibleSiteCount
@@ -275,13 +273,12 @@ class _HomeViewState extends State<HomeView> {
                         displaySites = state.homeSites
                             .take(visibleSiteCount)
                             .toList(growable: false);
-                            
-                        final dummyDistances = [100, 180, 250, 310, 420];
-                        displayDistances = List.generate(displaySites.length, (index) {
-                          return index < dummyDistances.length
-                              ? dummyDistances[index]
-                              : (index + 1) * 80;
-                        });
+                        const dummyDistances = [100, 180, 250, 310, 420];
+                        displayDistances = List.generate(
+                            displaySites.length,
+                            (i) => i < dummyDistances.length
+                                ? dummyDistances[i]
+                                : (i + 1) * 80);
                       }
 
                       return ListView.separated(
@@ -311,6 +308,7 @@ class _HomeViewState extends State<HomeView> {
                               location: '$distance km away',
                               imageUrl: site.mainImageUrl,
                               category: _capitalize(site.category.name),
+                              siteName: site.name,
                             ),
                           );
                         },

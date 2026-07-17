@@ -338,7 +338,8 @@ class KMLBuilder {
     </Placemark>''');
     }
 
-    final content = '''
+    final content =
+        '''
     <Style id="flat_boundary">
       <LineStyle>
         <color>$lineColor</color>
@@ -618,7 +619,8 @@ class KMLBuilder {
     final safeTitleXml = _escapeXml(title);
 
     // Truncate description to keep the balloon readable when a climate strip is shown.
-    final hasClimate = temperature != null || windSpeed != null || bestTimeToVisit != null;
+    final hasClimate =
+        temperature != null || windSpeed != null || bestTimeToVisit != null;
     final descText = hasClimate && description.length > 300
         ? '${description.substring(0, 300).trimRight()}...'
         : description;
@@ -637,29 +639,29 @@ class KMLBuilder {
     // 3 climate items in a single row side by side.
     final tempCell = temperature != null
         ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;border-right:1px solid #3a3636;">'
-          '<div style="font-size:22px;margin-bottom:6px;">&#127777;</div>'
-          '<div style="font-size:18px;font-weight:700;color:#ffffff;">$temperature</div>'
-          '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Temperature</div>'
-          '</div>'
+              '<div style="font-size:22px;margin-bottom:6px;">&#127777;</div>'
+              '<div style="font-size:18px;font-weight:700;color:#ffffff;">$temperature</div>'
+              '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Temperature</div>'
+              '</div>'
         : '';
     final windCell = windSpeed != null
         ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;border-right:1px solid #3a3636;">'
-          '<div style="font-size:22px;margin-bottom:6px;">&#127788;</div>'
-          '<div style="font-size:18px;font-weight:700;color:#ffffff;">$windSpeed</div>'
-          '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Wind Speed</div>'
-          '</div>'
+              '<div style="font-size:22px;margin-bottom:6px;">&#127788;</div>'
+              '<div style="font-size:18px;font-weight:700;color:#ffffff;">$windSpeed</div>'
+              '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Wind Speed</div>'
+              '</div>'
         : '';
     final bestCell = bestTimeToVisit != null
         ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;">'
-          '<div style="font-size:22px;margin-bottom:6px;">&#127758;</div>'
-          '<div style="font-size:18px;font-weight:700;color:#ffffff;">$bestTimeToVisit</div>'
-          '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Best Time</div>'
-          '</div>'
+              '<div style="font-size:22px;margin-bottom:6px;">&#127758;</div>'
+              '<div style="font-size:18px;font-weight:700;color:#ffffff;">$bestTimeToVisit</div>'
+              '<div style="font-size:13px;color:#aaaaaa;margin-top:4px;">Best Time</div>'
+              '</div>'
         : '';
     final climateStrip = hasClimate
         ? '<div style="display:flex;margin:18px 18px 0 18px;border-radius:14px;overflow:hidden;border:1px solid #3a3636;">'
-          '$tempCell$windCell$bestCell'
-          '</div>'
+              '$tempCell$windCell$bestCell'
+              '</div>'
         : '';
 
     return '''

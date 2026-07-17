@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -43,8 +44,16 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   bool _isAudioPlaying = false;
   bool _isMuted = false;
   bool _isOrbitActive = false;
+  // True once the 'Play Audio Story?' dialog has been shown this visit.
+  // Resets when the user navigates to a new site (new widget instance).
+  bool _hasAskedStoryQuestion = false;
   bool _isLgScenePrepared = false;
   bool _isRenderingOnLg = false;
+
+  // Timer that resets the orbit button when the KML tour finishes on LG.
+  // The tour duration is 30 s; we add a 2 s buffer for LG processing.
+  static const int _orbitTourDurationSeconds = 30;
+  Timer? _orbitCompletionTimer;
   late final WebViewController _mapController;
   late final UnescoSiteGeometryRepository _geometryRepository;
   late final HeritageSiteDetailViewModel _detailViewModel;
@@ -498,6 +507,13 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
           _isOrbitActive = false;
           _isLgScenePrepared = true;
         });
+        // Auto-start orbit after a minimum delay to allow the fly-to animation
+        // to complete on Liquid Galaxy before the orbit begins.
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted && _isLgScenePrepared && !_isOrbitActive && !_isRenderingOnLg) {
+            _autoStartOrbit();
+          }
+        });
       }
     } catch (error) {
       _showSnackBar(error.toString());
@@ -566,7 +582,43 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       return;
     }
 
-    // Ask whether to play the audio story alongside the orbit.
+    // Re-anchor the camera to the site before replaying the orbit tour.
+    // This prevents the jarring snap/glitch caused by the KML tour always
+    // restarting from its first keyframe position.
+    setState(() {
+      _isRenderingOnLg = true;
+    });
+
+    try {
+      final payload = await _buildLgRenderPayload();
+      await widget.settingsViewModel.flyToOnLiquidGalaxy(
+        latitude: payload.cameraProfile.center.latitude,
+        longitude: payload.cameraProfile.center.longitude,
+        range: payload.cameraProfile.flyToRange,
+        tilt: payload.cameraProfile.tilt,
+      );
+      // Allow the camera animation to settle before starting the tour.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      await widget.settingsViewModel.startOrbitOnLiquidGalaxy();
+      if (mounted) {
+        setState(() {
+          _isOrbitActive = true;
+        });
+      }
+    } catch (error) {
+      _showSnackBar(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRenderingOnLg = false;
+        });
+      }
+    }
+
+    // Only ask about the audio story on the very first orbit of this visit.
+    if (!mounted || !_isOrbitActive || _hasAskedStoryQuestion) return;
+
+    _hasAskedStoryQuestion = true;
     final shouldPlayStory = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -596,26 +648,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       _playStory();
     }
 
-    setState(() {
-      _isRenderingOnLg = true;
-    });
-
-    try {
-      await widget.settingsViewModel.startOrbitOnLiquidGalaxy();
-      if (mounted) {
-        setState(() {
-          _isOrbitActive = true;
-        });
-      }
-    } catch (error) {
-      _showSnackBar(error.toString());
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRenderingOnLg = false;
-        });
-      }
-    }
+    // Start the countdown so the button resets when the tour ends.
+    _startOrbitCompletionTimer();
   }
 
   Future<void> _handleStopOrbitPressed() async {
@@ -623,6 +657,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     if (shouldStop != true) {
       return;
     }
+    // User confirmed stop — cancel the auto-reset timer.
+    _cancelOrbitCompletionTimer();
 
     if (!widget.settingsViewModel.state.isConnected) {
       _showSnackBar('Connect to Liquid Galaxy first.');
@@ -672,6 +708,82 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         );
       },
     );
+  }
+
+  /// Starts the orbit silently (no dialog) then prompts the user about the
+  /// audio story. Called automatically after fly-to completes.
+  Future<void> _autoStartOrbit() async {
+    if (_isRenderingOnLg || _isOrbitActive) return;
+    if (!widget.settingsViewModel.state.isConnected) return;
+
+    setState(() => _isRenderingOnLg = true);
+
+    try {
+      await widget.settingsViewModel.startOrbitOnLiquidGalaxy();
+      if (mounted) {
+        setState(() => _isOrbitActive = true);
+      }
+    } catch (error) {
+      _showSnackBar(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _isRenderingOnLg = false);
+      }
+    }
+
+    // Only ask about the audio story on the very first orbit of this visit.
+    if (!mounted || !_isOrbitActive || _hasAskedStoryQuestion) return;
+
+    _hasAskedStoryQuestion = true;
+    final shouldPlayStory = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerHighest,
+          title: const Text('Play Audio Story?'),
+          content: const Text(
+            'Would you like to hear an AI-generated story about this site while orbiting?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('No'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (shouldPlayStory == true) _playStory();
+
+    // Start the countdown so the button resets when the tour ends.
+    _startOrbitCompletionTimer();
+  }
+
+  /// Starts a one-shot timer that resets [_isOrbitActive] to false once the
+  /// orbit KML tour finishes playing on Liquid Galaxy. Cancels any previous
+  /// timer first so restarting orbit always gets a fresh countdown.
+  void _startOrbitCompletionTimer() {
+    _orbitCompletionTimer?.cancel();
+    _orbitCompletionTimer = Timer(
+      const Duration(seconds: _orbitTourDurationSeconds + 2),
+      () {
+        if (mounted && _isOrbitActive) {
+          setState(() => _isOrbitActive = false);
+        }
+      },
+    );
+  }
+
+  /// Cancels the orbit completion timer (called on manual stop or dispose).
+  void _cancelOrbitCompletionTimer() {
+    _orbitCompletionTimer?.cancel();
+    _orbitCompletionTimer = null;
   }
 
   _GeometryBounds _calculateGeometryBounds(HeritagePolygonGeometry geometry) {
@@ -885,6 +997,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
   @override
   void dispose() {
+    _cancelOrbitCompletionTimer();
     _mapSyncService?.dispose();
     _flutterTts.stop();
     final listener = _detailViewModelListener;

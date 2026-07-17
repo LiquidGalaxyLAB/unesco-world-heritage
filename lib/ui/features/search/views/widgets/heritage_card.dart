@@ -3,24 +3,98 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../data/services/wikipedia_image_service.dart';
 
-class HeritageCard extends StatelessWidget {
-  final String title;
-  final String location;
-  final String imageUrl;
-  final String category;
+// ---------------------------------------------------------------------------
+// HeritageCard
+// ---------------------------------------------------------------------------
 
+/// A card that displays a heritage site image, title, location and category.
+///
+/// When [imageUrl] is empty and [siteName] is provided the card lazily fetches
+/// a Wikipedia thumbnail so sites without UNESCO photos (e.g. Sundarbans
+/// National Park) still show an image. The fetch is done per-card so the
+/// bulk list load is never slowed down.
+class HeritageCard extends StatefulWidget {
   const HeritageCard({
     super.key,
     required this.title,
     required this.location,
     required this.imageUrl,
     required this.category,
+    this.siteName,
   });
+
+  final String title;
+  final String location;
+  final String imageUrl;
+  final String category;
+
+  /// Site name used for the Wikipedia image fallback when [imageUrl] is empty.
+  /// Pass [HeritageSite.name] here from the caller.
+  final String? siteName;
+
+  @override
+  State<HeritageCard> createState() => _HeritageCardState();
+}
+
+class _HeritageCardState extends State<HeritageCard> {
+  /// Shared across all card instances so the same site is never fetched twice
+  /// during a session (WikipediaImageService has its own internal Future-cache).
+  static final WikipediaImageService _wikiService = WikipediaImageService();
+
+  /// Resolved image URL — starts as the passed-in URL, may be filled by the
+  /// Wikipedia fallback fetch.
+  late String _resolvedImageUrl;
+
+  /// True while the Wikipedia fallback fetch is in progress.
+  bool _fetchingWikipediaImage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvedImageUrl = widget.imageUrl;
+    _maybeLoadWikipediaFallback();
+  }
+
+  @override
+  void didUpdateWidget(HeritageCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the parent supplies a real URL now, use it and skip the fallback.
+    if (widget.imageUrl != oldWidget.imageUrl) {
+      _resolvedImageUrl = widget.imageUrl;
+      if (_resolvedImageUrl.isEmpty) {
+        _maybeLoadWikipediaFallback();
+      }
+    }
+  }
+
+  /// Kicks off a Wikipedia image fetch only when the UNESCO image is absent.
+  Future<void> _maybeLoadWikipediaFallback() async {
+    final name = widget.siteName;
+    if (_resolvedImageUrl.isNotEmpty || name == null || name.trim().isEmpty) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _fetchingWikipediaImage = true);
+    }
+
+    final url = await _wikiService.fetchImageUrl(name);
+
+    if (!mounted) return;
+    setState(() {
+      _fetchingWikipediaImage = false;
+      if (url != null && url.isNotEmpty) {
+        _resolvedImageUrl = url;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = imageUrl.trim().isNotEmpty;
+    final hasImage = _resolvedImageUrl.trim().isNotEmpty;
+    final isLoadingFallback = _fetchingWikipediaImage;
 
     return Container(
       height: 180,
@@ -37,7 +111,7 @@ class HeritageCard extends StatelessWidget {
             // Background Image
             if (hasImage)
               CachedNetworkImage(
-                imageUrl: imageUrl,
+                imageUrl: _resolvedImageUrl,
                 fit: BoxFit.cover,
                 placeholder: (context, url) {
                   return Shimmer(
@@ -56,6 +130,16 @@ class HeritageCard extends StatelessWidget {
                   ),
                 ),
               )
+            else if (isLoadingFallback)
+              // Wikipedia fetch in progress — show shimmer placeholder
+              Shimmer(
+                duration: const Duration(milliseconds: 1400),
+                color: AppColors.onSurface,
+                colorOpacity: 0.12,
+                child: const ColoredBox(
+                  color: AppColors.surfaceContainerHighest,
+                ),
+              )
             else
               const ColoredBox(
                 color: AppColors.surfaceContainerHighest,
@@ -66,7 +150,7 @@ class HeritageCard extends StatelessWidget {
                   ),
                 ),
               ),
-            // Gradient Overlay for text readability
+            // Gradient overlay for text readability
             DecoratedBox(
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.3),
@@ -82,7 +166,7 @@ class HeritageCard extends StatelessWidget {
                 ),
               ),
             ),
-            // Text Content on Bottom Left
+            // Text content on bottom left
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -90,7 +174,7 @@ class HeritageCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    widget.title,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: AppColors.onSurface,
                       fontWeight: FontWeight.w800,
@@ -100,7 +184,7 @@ class HeritageCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    location,
+                    widget.location,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       color: AppColors.onSurface.withValues(alpha: 0.9),
                       fontWeight: FontWeight.w700,
@@ -110,7 +194,7 @@ class HeritageCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    category,
+                    widget.category,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: AppColors.onSurface.withValues(alpha: 0.8),
                     ),
@@ -124,6 +208,10 @@ class HeritageCard extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// HeritageCardSkeleton — unchanged
+// ---------------------------------------------------------------------------
 
 class HeritageCardSkeleton extends StatelessWidget {
   const HeritageCardSkeleton({super.key});
