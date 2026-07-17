@@ -14,6 +14,11 @@ class HeritageSitesState {
     this.startYear,
     this.endYear,
     this.showDangerSites = false,
+    this.allSitesLoaded = false,
+    this.userLatitude,
+    this.userLongitude,
+    this.nearestSites = const <HeritageSite>[],
+    this.nearestDistancesKm = const <int>[],
   });
 
   final List<HeritageSite> homeSites;
@@ -28,6 +33,14 @@ class HeritageSitesState {
   final int? startYear;
   final int? endYear;
   final bool showDangerSites;
+  /// True once the full dataset is in memory.
+  final bool allSitesLoaded;
+  /// Last GPS coordinates provided by the home view.
+  final double? userLatitude;
+  final double? userLongitude;
+  /// Pre-sorted nearest 5 sites (session-cached in the VM).
+  final List<HeritageSite> nearestSites;
+  final List<int> nearestDistancesKm;
 
   HeritageSitesState copyWith({
     List<HeritageSite>? homeSites,
@@ -43,6 +56,11 @@ class HeritageSitesState {
     int? startYear,
     int? endYear,
     bool? showDangerSites,
+    bool? allSitesLoaded,
+    double? userLatitude,
+    double? userLongitude,
+    List<HeritageSite>? nearestSites,
+    List<int>? nearestDistancesKm,
   }) {
     return HeritageSitesState(
       homeSites: homeSites ?? this.homeSites,
@@ -57,6 +75,11 @@ class HeritageSitesState {
       startYear: startYear ?? this.startYear,
       endYear: endYear ?? this.endYear,
       showDangerSites: showDangerSites ?? this.showDangerSites,
+      allSitesLoaded: allSitesLoaded ?? this.allSitesLoaded,
+      userLatitude: userLatitude ?? this.userLatitude,
+      userLongitude: userLongitude ?? this.userLongitude,
+      nearestSites: nearestSites ?? this.nearestSites,
+      nearestDistancesKm: nearestDistancesKm ?? this.nearestDistancesKm,
     );
   }
 }

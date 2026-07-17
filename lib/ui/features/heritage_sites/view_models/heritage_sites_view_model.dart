@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -73,7 +74,10 @@ class HeritageSitesViewModel extends ChangeNotifier {
         sites: sites,
         filteredSites: _buildFilteredSites(sites: sites),
         isLoading: false,
+        allSitesLoaded: true,
       );
+      // Recompute nearest sites with the refreshed full dataset.
+      _computeAndCacheNearestSites();
     } catch (_) {
       _state = _state.copyWith(
         isLoading: false,
@@ -90,7 +94,10 @@ class HeritageSitesViewModel extends ChangeNotifier {
       _state = _state.copyWith(
         sites: sites,
         filteredSites: _buildFilteredSites(sites: sites),
+        allSitesLoaded: true,
       );
+      // Recompute nearest sites now that we have the full dataset.
+      _computeAndCacheNearestSites();
       notifyListeners();
     } catch (_) {
       if (_state.sites.isEmpty) {
@@ -101,6 +108,60 @@ class HeritageSitesViewModel extends ChangeNotifier {
       }
     }
   }
+
+  /// Called by the home view whenever GPS resolves. Stores the coordinates in
+  /// session state and immediately recomputes nearest sites if the full dataset
+  /// is already available.
+  void updateUserLocation(double latitude, double longitude) {
+    _state = _state.copyWith(
+      userLatitude: latitude,
+      userLongitude: longitude,
+    );
+    _computeAndCacheNearestSites();
+    notifyListeners();
+  }
+
+  /// Sorts [state.sites] by Haversine distance from the stored GPS coordinates
+  /// and persists the top-5 in [state.nearestSites]. No-op until both GPS and
+  /// the full dataset are available.
+  void _computeAndCacheNearestSites() {
+    final lat = _state.userLatitude;
+    final lng = _state.userLongitude;
+    if (lat == null || lng == null) return;
+    if (!_state.allSitesLoaded) return;
+    final sites = _state.sites;
+    if (sites.isEmpty) return;
+
+    final withDist = sites.map((site) {
+      final distKm =
+          _distanceKm(lat, lng, site.latitude, site.longitude).round();
+      return {'site': site, 'dist': distKm};
+    }).toList()
+      ..sort((a, b) =>
+          (a['dist'] as int).compareTo(b['dist'] as int));
+
+    final top = withDist.take(5).toList();
+    _state = _state.copyWith(
+      nearestSites: top.map((e) => e['site'] as HeritageSite).toList(),
+      nearestDistancesKm: top.map((e) => e['dist'] as int).toList(),
+    );
+  }
+
+  /// Haversine great-circle distance in kilometres.
+  double _distanceKm(
+      double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371.0;
+    final dLat = _toRad(lat2 - lat1);
+    final dLon = _toRad(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRad(lat1)) *
+            math.cos(_toRad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  double _toRad(double deg) => deg * math.pi / 180;
 
   void search(String query) {
     _state = _state.copyWith(

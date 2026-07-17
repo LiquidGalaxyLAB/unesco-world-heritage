@@ -243,6 +243,30 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Repositions the LG camera without re-uploading any KML.
+  /// Use this to re-anchor the camera before replaying an orbit tour so there
+  /// is no jarring snap back to the tour's start position.
+  Future<void> flyToOnLiquidGalaxy({
+    required double latitude,
+    required double longitude,
+    required double range,
+    double altitude = 150,
+    double tilt = 60,
+    double bearing = 0,
+  }) async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+    await _lgRigService.flyTo(
+      latitude: latitude,
+      longitude: longitude,
+      altitude: altitude,
+      zoom: range,
+      tilt: tilt,
+      bearing: bearing,
+    );
+  }
+
   Future<void> startOrbitOnLiquidGalaxy() async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
