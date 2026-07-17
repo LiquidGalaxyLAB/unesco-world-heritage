@@ -62,6 +62,12 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   WeatherData? _weatherData;
   Future<HeritageSiteGeometry?>? _siteGeometryFuture;
   final FlutterTts _flutterTts = FlutterTts();
+  // Single GeminiService instance reused for every story play on this page.
+  // Avoids re-establishing the TLS/API connection on each call.
+  late final GeminiService _geminiService;
+  // True while _playStory is in the stop()→speak() transition so that the TTS
+  // completion handler does not incorrectly reset _isAudioPlaying to false.
+  bool _isSwitchingSpeech = false;
   VoidCallback? _detailViewModelListener;
   String? _bestTimeToVisit;
   // Futures cached so _buildLgRenderPayload can await them regardless of
@@ -84,6 +90,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     _weatherFuture = _fetchWeather();
     _bestTimeFuture = _loadBestTimeToVisit();
     _initTts();
+    _geminiService = GeminiService();
 
     _mapController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -442,9 +449,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
     if (story == null) {
       try {
-        final geminiService = GeminiService();
+        // Reuse the shared instance — avoids a new TLS handshake every call.
         final prompt = 'Tell me a short interesting narrative about ${currentSite.name}. Include what site it is, where it is located (${currentSite.country}), the best time to visit, and one interesting fact. Keep it short and engaging.';
-        final response = await geminiService.sendMessage(prompt);
+        final response = await _geminiService.sendMessage(prompt);
         if (response.startsWith('Error:')) {
           story = currentSite.shortDescription.trim().isNotEmpty
               ? currentSite.shortDescription.trim()
@@ -468,7 +475,12 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     
     if (_isAudioPlaying) {
       await _flutterTts.setVolume(_isMuted ? 0.0 : 1.0);
+      // Guard the stop()→speak() transition so the completion handler does
+      // not fire _isAudioPlaying = false between the two calls, which was
+      // causing the orbit glitch and the Play/Pause button flicker.
+      _isSwitchingSpeech = true;
       await _flutterTts.stop();
+      _isSwitchingSpeech = false;
       await _flutterTts.speak(story!);
     }
   }
@@ -966,7 +978,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         ]);
 
     _flutterTts.setCompletionHandler(() {
-      if (mounted) {
+      // Skip the reset when we are in the middle of a stop()→speak() switch
+      // so _isAudioPlaying stays true and the UI doesn't flicker.
+      if (mounted && !_isSwitchingSpeech) {
         setState(() {
           _isAudioPlaying = false;
         });
