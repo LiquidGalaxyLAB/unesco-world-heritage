@@ -336,33 +336,45 @@ class SettingsViewModel extends ChangeNotifier {
       await _lgRigService.stopOrbit();
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await _lgRigService.clearMaster();
-      // Ensure all slave screens have their polling refresh active before
-      // sending any KML.  Without this cycle the slaves don't re-poll
-      // /var/www/html/kml/slave_N.kml and show a blank or stale frame.
-      await _lgRigService.resetRefresh();
-      await _lgRigService.setRefresh();
-      await _lgRigService.flyTo(
-        latitude: latitude,
-        longitude: longitude,
-        altitude: altitude,
-        zoom: range,
-        tilt: tilt,
-        bearing: bearing,
-      );
-      await Future<void>.delayed(const Duration(seconds: 3));
-      await _lgRigService.sendKml(fileName, kml);
-      if (orbitFileName != null &&
+
+      // Build the list of concurrent operations:
+      //  • flyTo   — writes to /tmp/query.txt (starts camera animation)
+      //  • sendKml — SFTP-writes boundary.kml + overwrites kmls.txt
+      //  • uploadKml — SFTP-writes orbit.kml (no kmls.txt touch yet)
+      final concurrentOps = <Future<void>>[
+        _lgRigService.flyTo(
+          latitude: latitude,
+          longitude: longitude,
+          altitude: altitude,
+          zoom: range,
+          tilt: tilt,
+          bearing: bearing,
+        ),
+        _lgRigService.sendKml(fileName, kml),
+      ];
+
+      final hasOrbit =
+          orbitFileName != null &&
           orbitFileName.trim().isNotEmpty &&
           orbitKml != null &&
-          orbitKml.trim().isNotEmpty) {
-        await _lgRigService.uploadKml(orbitFileName, orbitKml);
+          orbitKml.trim().isNotEmpty;
+
+      if (hasOrbit) {
+        concurrentOps.add(_lgRigService.uploadKml(orbitFileName, orbitKml));
+      }
+
+      await Future.wait(concurrentOps);
+
+      // appendKml must run after sendKml completes (both touch kmls.txt).
+      if (hasOrbit) {
         await _lgRigService.appendKml(orbitFileName);
-        // Allow Google Earth time to refresh and parse the tour KML
-        await Future<void>.delayed(const Duration(seconds: 3));
         if (startOrbitAfterRender) {
+          // Short pause so Google Earth can parse the freshly-appended tour.
+          await Future<void>.delayed(const Duration(seconds: 2));
           await _lgRigService.startOrbit();
         }
       }
+
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
       _state = _state.copyWith(
