@@ -61,9 +61,8 @@ class SettingsViewModel extends ChangeNotifier {
       notifyListeners();
 
       await _lgRigService.clearKml();
-      await _lgRigService.setRefresh();
-      await _lgRigService.clearBalloon();
       await _lgRigService.showLogoOverlay();
+      await _lgRigService.setRefresh();
     } catch (error) {
       if (_lgRigService.isConnected) {
         _state = _state.copyWith(
@@ -337,6 +336,11 @@ class SettingsViewModel extends ChangeNotifier {
       await _lgRigService.stopOrbit();
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await _lgRigService.clearMaster();
+      // Ensure all slave screens have their polling refresh active before
+      // sending any KML.  Without this cycle the slaves don't re-poll
+      // /var/www/html/kml/slave_N.kml and show a blank or stale frame.
+      await _lgRigService.resetRefresh();
+      await _lgRigService.setRefresh();
       await _lgRigService.flyTo(
         latitude: latitude,
         longitude: longitude,
