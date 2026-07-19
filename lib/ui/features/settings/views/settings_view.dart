@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../domain/models/lg_connection_settings.dart';
 import '../../auth/views/auth_view.dart';
@@ -53,8 +54,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     ),
   ];
 
-  int _currentIndex =
-      0; // Default to Home tab
+  int _currentIndex = 0; // Default to Home tab
   late final SettingsViewModel _settingsViewModel;
   late final HeritageSitesViewModel _heritageSitesViewModel;
   late final AnimationController _fadeController;
@@ -301,6 +301,7 @@ class _ConnectionTabState extends State<ConnectionTab> {
   late final TextEditingController _passwordController;
   late final TextEditingController _screensController;
   bool _obscurePassword = true;
+  Timer? _draftSaveTimer;
 
   @override
   void initState() {
@@ -318,18 +319,33 @@ class _ConnectionTabState extends State<ConnectionTab> {
       text: settings?.screens.toString() ?? '3',
     );
 
+    _hostController.addListener(_scheduleDraftSave);
+    _passwordController.addListener(_scheduleDraftSave);
+
     widget.viewModel.addListener(_onViewModelChanged);
   }
 
   @override
   void dispose() {
     widget.viewModel.removeListener(_onViewModelChanged);
+    _draftSaveTimer?.cancel();
     _hostController.dispose();
     _portController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     _screensController.dispose();
     super.dispose();
+  }
+
+  void _scheduleDraftSave() {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 500), () {
+      final host = _hostController.text.trim();
+      final password = _passwordController.text;
+      if (host.isEmpty || password.isEmpty) return;
+
+      widget.viewModel.saveSettings(_getFormSettings());
+    });
   }
 
   void _onViewModelChanged() {
@@ -680,7 +696,3 @@ class AboutTab extends StatelessWidget {
     );
   }
 }
-
-
-
-
