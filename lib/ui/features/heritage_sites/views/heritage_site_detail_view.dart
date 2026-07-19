@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -24,6 +23,7 @@ import '../../settings/view_models/settings_view_model.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
 import 'widgets/gemini_chat_bottom_sheet.dart';
 import '../../../../data/services/gemini_service.dart';
+import '../../../../data/services/speechmatics_tts_service.dart';
 
 class HeritageSiteDetailView extends StatefulWidget {
   const HeritageSiteDetailView({
@@ -61,13 +61,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   bool _isLoadingWeather = true;
   WeatherData? _weatherData;
   Future<HeritageSiteGeometry?>? _siteGeometryFuture;
-  final FlutterTts _flutterTts = FlutterTts();
+  late final SpeechmaticsTtsService _speechmaticsTts;
   // Single GeminiService instance reused for every story play on this page.
   // Avoids re-establishing the TLS/API connection on each call.
   late final GeminiService _geminiService;
-  // True while _playStory is in the stop()→speak() transition so that the TTS
-  // completion handler does not incorrectly reset _isAudioPlaying to false.
-  bool _isSwitchingSpeech = false;
+  late final Future<String?> _storyFuture;
   VoidCallback? _detailViewModelListener;
   String? _bestTimeToVisit;
   // Futures cached so _buildLgRenderPayload can await them regardless of
@@ -89,15 +87,17 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     _detailViewModel.loadSite(widget.site.propertyId);
     _weatherFuture = _fetchWeather();
     _bestTimeFuture = _loadBestTimeToVisit();
-    _initTts();
+    _speechmaticsTts = SpeechmaticsTtsService(
+      onPlaybackComplete: () {
+        if (mounted) setState(() => _isAudioPlaying = false);
+      },
+    );
     _geminiService = GeminiService();
+    _storyFuture = _prepareStory(widget.site);
 
     _mapController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..addJavaScriptChannel(
-        'MapSync',
-        onMessageReceived: _onMapCameraChanged,
-      );
+      ..addJavaScriptChannel('MapSync', onMessageReceived: _onMapCameraChanged);
 
     _loadMapHtml();
     _renderBoundaryPolygonOnMap();
@@ -140,8 +140,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   /// Returns the matched value (or null) so callers can await it directly.
   Future<String?> _loadBestTimeToVisit() async {
     try {
-      final raw = await rootBundle
-          .loadString('assets/whc_site_bestTimeVisit.json');
+      final raw = await rootBundle.loadString(
+        'assets/whc_site_bestTimeVisit.json',
+      );
       final list = jsonDecode(raw) as List<dynamic>;
       final propertyIdStr = widget.site.propertyId.toString();
       for (final entry in list) {
@@ -293,7 +294,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       // Escape single-quotes for the JS string literal.
       final escapedJson = ringsJson.replaceAll("'", "\\'");
 
-      final jsCall = "window.addSitePolygons("
+      final jsCall =
+          "window.addSitePolygons("
           "'$escapedJson', "
           "'${colors.strokeColor}', "
           "'${colors.fillColor}', "
@@ -419,12 +421,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       longitude: resolvedSite.longitude,
       latitude: resolvedSite.latitude,
       imageUrl: resolvedSite.mainImageUrl,
-      temperature: weather != null
-          ? '${weather.temperature.round()} °C'
-          : null,
-      windSpeed: weather != null
-          ? '${weather.windSpeed.round()} km/h'
-          : null,
+      temperature: weather != null ? '${weather.temperature.round()} °C' : null,
+      windSpeed: weather != null ? '${weather.windSpeed.round()} km/h' : null,
       bestTimeToVisit: bestTime,
     );
 
@@ -444,13 +442,14 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     final currentSite = _detailViewModel.state.site ?? widget.site;
     final box = Hive.box<String>('stories');
     final cacheKey = 'site_story_${currentSite.propertyId}';
-    
-    String? story = box.get(cacheKey);
+
+    String? story = box.get(cacheKey) ?? await _storyFuture;
 
     if (story == null) {
       try {
         // Reuse the shared instance — avoids a new TLS handshake every call.
-        final prompt = 'Tell me a short interesting narrative about ${currentSite.name}. Include what site it is, where it is located (${currentSite.country}), the best time to visit, and one interesting fact. Keep it short and engaging.';
+        final prompt =
+            'Tell me a short interesting narrative about ${currentSite.name}. Include what site it is, where it is located (${currentSite.country}), the best time to visit, and one interesting fact. Keep it short and engaging.';
         final response = await _geminiService.sendMessage(prompt);
         if (response.startsWith('Error:')) {
           story = currentSite.shortDescription.trim().isNotEmpty
@@ -472,16 +471,50 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
 
     if (!mounted) return;
-    
+
     if (_isAudioPlaying) {
-      await _flutterTts.setVolume(_isMuted ? 0.0 : 1.0);
+      if (_isMuted) {
+        await _speechmaticsTts.stop();
+        if (mounted) setState(() => _isAudioPlaying = false);
+        return;
+      }
       // Guard the stop()→speak() transition so the completion handler does
       // not fire _isAudioPlaying = false between the two calls, which was
       // causing the orbit glitch and the Play/Pause button flicker.
-      _isSwitchingSpeech = true;
-      await _flutterTts.stop();
-      _isSwitchingSpeech = false;
-      await _flutterTts.speak(story!);
+      await _speechmaticsTts.stop();
+      try {
+        await _speechmaticsTts.speak(story!);
+      } catch (error) {
+        if (mounted) {
+          setState(() => _isAudioPlaying = false);
+          _showSnackBar('Could not play the Speechmatics audio story. $error');
+        }
+      }
+    }
+  }
+
+  Future<String> _prepareStory(HeritageSite site) async {
+    final box = Hive.box<String>('stories');
+    final cacheKey = 'site_story_${site.propertyId}';
+    final cachedStory = box.get(cacheKey);
+    if (cachedStory != null) return cachedStory;
+
+    final fallback = site.shortDescription.trim().isNotEmpty
+        ? site.shortDescription.trim()
+        : site.description.trim().isNotEmpty
+        ? site.description.trim()
+        : 'No description available for this UNESCO World Heritage Site.';
+
+    try {
+      final prompt =
+          'Tell me a short interesting narrative about ${site.name}. Include what site it is, where it is located (${site.country}), the best time to visit, and one interesting fact. Keep it short and engaging.';
+      final story = await _geminiService.sendMessage(prompt);
+      if (story.startsWith('Error:')) return fallback;
+
+      await box.put(cacheKey, story);
+      return story;
+    } catch (_) {
+      return fallback;
     }
   }
 
@@ -522,7 +555,10 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         // Auto-start orbit after a minimum delay to allow the fly-to animation
         // to complete on Liquid Galaxy before the orbit begins.
         Future.delayed(const Duration(seconds: 3), () {
-          if (mounted && _isLgScenePrepared && !_isOrbitActive && !_isRenderingOnLg) {
+          if (mounted &&
+              _isLgScenePrepared &&
+              !_isOrbitActive &&
+              !_isRenderingOnLg) {
             _autoStartOrbit();
           }
         });
@@ -552,7 +588,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         return AlertDialog(
           backgroundColor: AppColors.surfaceContainerHighest,
           title: const Text('Play Audio Story?'),
-          content: const Text('Would you like to hear an AI-generated story about this site?'),
+          content: const Text(
+            'Would you like to hear an AI-generated story about this site?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -963,31 +1001,6 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _initTts() async {
-    await _flutterTts.setLanguage("en-US");
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setSpeechRate(0.5);
-    await _flutterTts.setPitch(1.0);
-
-    await _flutterTts.setSharedInstance(true);
-    await _flutterTts
-        .setIosAudioCategory(IosTextToSpeechAudioCategory.playback, [
-          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-          IosTextToSpeechAudioCategoryOptions.mixWithOthers,
-        ]);
-
-    _flutterTts.setCompletionHandler(() {
-      // Skip the reset when we are in the middle of a stop()→speak() switch
-      // so _isAudioPlaying stays true and the UI doesn't flicker.
-      if (mounted && !_isSwitchingSpeech) {
-        setState(() {
-          _isAudioPlaying = false;
-        });
-      }
-    });
-  }
-
   /// Handles incoming camera position updates from the WebView map.
   /// Sync is always active when LG is connected – no manual toggle needed.
   void _onMapCameraChanged(JavaScriptMessage message) {
@@ -1008,12 +1021,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
   }
 
-
   @override
   void dispose() {
     _cancelOrbitCompletionTimer();
     _mapSyncService?.dispose();
-    _flutterTts.stop();
+    _speechmaticsTts.dispose();
     final listener = _detailViewModelListener;
     if (listener != null) {
       _detailViewModel.removeListener(listener);
@@ -1204,54 +1216,73 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                             children: [
                               Expanded(
                                 child: FilledButton.icon(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     if (_isAudioPlaying) {
                                       setState(() {
                                         _isAudioPlaying = false;
                                       });
-                                      _flutterTts.stop();
+                                      await _speechmaticsTts.stop();
                                     } else {
                                       _playStory();
                                     }
                                   },
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: theme.colorScheme.primaryContainer,
-                                    foregroundColor: theme.colorScheme.onPrimaryContainer,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    backgroundColor:
+                                        theme.colorScheme.primaryContainer,
+                                    foregroundColor:
+                                        theme.colorScheme.onPrimaryContainer,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                   ),
-                                  icon: Icon(_isAudioPlaying ? Icons.pause : Icons.play_arrow),
-                                  label: Text(_isAudioPlaying ? 'Pause' : 'Play'),
+                                  icon: Icon(
+                                    _isAudioPlaying
+                                        ? Icons.pause
+                                        : Icons.play_arrow,
+                                  ),
+                                  label: Text(
+                                    _isAudioPlaying ? 'Pause' : 'Play',
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: FilledButton.icon(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     setState(() {
                                       _isMuted = !_isMuted;
-                                      _flutterTts.setVolume(_isMuted ? 0.0 : 1.0);
+                                      if (_isMuted) _isAudioPlaying = false;
                                     });
+                                    if (_isMuted) await _speechmaticsTts.stop();
                                   },
                                   style: FilledButton.styleFrom(
                                     backgroundColor: AppColors.surfaceVariant,
                                     foregroundColor: AppColors.onSurface,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                   ),
-                                  icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
+                                  icon: Icon(
+                                    _isMuted
+                                        ? Icons.volume_off
+                                        : Icons.volume_up,
+                                  ),
                                   label: Text(_isMuted ? 'Unmute' : 'Mute'),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: FilledButton.icon(
-                                  onPressed: () {
-                                    _flutterTts.stop();
-                                    _playStory();
+                                  onPressed: () async {
+                                    await _speechmaticsTts.stop();
+                                    await _playStory();
                                   },
                                   style: FilledButton.styleFrom(
                                     backgroundColor: AppColors.surfaceVariant,
                                     foregroundColor: AppColors.onSurface,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                   ),
                                   icon: const Icon(Icons.replay),
                                   label: const Text('Replay'),
