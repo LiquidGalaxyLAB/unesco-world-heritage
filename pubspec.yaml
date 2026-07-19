@@ -44,13 +44,13 @@ dependencies:
   google_generative_ai: ^0.4.7
   flutter_riverpod: ^3.3.2
   speech_to_text: ^7.4.0
-  flutter_tts: ^4.2.5
   url_launcher: ^6.3.2
   animated_text_kit: ^4.3.0
   geolocator: ^14.0.3
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  audioplayers: ^6.8.1
+  flutter_pcm_sound: ^3.3.3
+  flutter_dotenv: ^6.0.1
   path_provider: ^2.1.6
 
 dev_dependencies:
@@ -76,6 +76,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - .env
     - assets/images/
     - assets/images/project logos/
     - assets/whc_site_bestTimeVisit.json

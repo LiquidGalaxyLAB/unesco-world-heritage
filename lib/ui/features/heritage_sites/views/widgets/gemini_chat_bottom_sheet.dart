@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../../../../data/services/gemini_service.dart';
+import '../../../../../../data/services/speechmatics_tts_service.dart';
 import '../../../../../core/theme/app_colors.dart';
 
 class ChatMessage {
@@ -27,7 +26,7 @@ class _GeminiChatBottomSheetState extends State<GeminiChatBottomSheet> {
   final List<ChatMessage> _messages = [];
   final GeminiService _geminiService = GeminiService();
   final SpeechToText _speechToText = SpeechToText();
-  final FlutterTts _flutterTts = FlutterTts();
+  late final SpeechmaticsTtsService _speechmaticsTts;
   bool _speechEnabled = false;
   bool _isListening = false;
   bool _isAudioEnabled = false;
@@ -36,6 +35,7 @@ class _GeminiChatBottomSheetState extends State<GeminiChatBottomSheet> {
   @override
   void initState() {
     super.initState();
+    _speechmaticsTts = SpeechmaticsTtsService();
     _initSpeech();
     _messages.add(
       ChatMessage(
@@ -48,30 +48,13 @@ class _GeminiChatBottomSheetState extends State<GeminiChatBottomSheet> {
   void _initSpeech() async {
     _speechEnabled = await _speechToText.initialize();
     
-    // TTS Configuration
-    await _flutterTts.setLanguage("en-US");
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setSpeechRate(0.5);
-    await _flutterTts.setPitch(1.0);
-    
-    // iOS Specific config to play even in silent mode
-    await _flutterTts.setSharedInstance(true);
-    await _flutterTts.setIosAudioCategory(
-      IosTextToSpeechAudioCategory.playback,
-      [
-        IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-        IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-        IosTextToSpeechAudioCategoryOptions.mixWithOthers,
-      ],
-    );
-
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _controller.dispose();
-    _flutterTts.stop();
+    _speechmaticsTts.dispose();
     super.dispose();
   }
 
@@ -95,7 +78,7 @@ class _GeminiChatBottomSheetState extends State<GeminiChatBottomSheet> {
           _isLoading = false;
         });
         if (_isAudioEnabled) {
-          _flutterTts.speak(response);
+          _speak(response);
         }
       }
     } catch (e) {
@@ -110,15 +93,27 @@ class _GeminiChatBottomSheetState extends State<GeminiChatBottomSheet> {
     }
   }
 
+  Future<void> _speak(String text) async {
+    try {
+      await _speechmaticsTts.speak(text);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not play Speechmatics audio. $error')),
+        );
+      }
+    }
+  }
+
   void _toggleAudio() {
     setState(() {
       _isAudioEnabled = !_isAudioEnabled;
     });
     if (!_isAudioEnabled) {
-      _flutterTts.stop();
+      _speechmaticsTts.stop();
     } else {
       if (_messages.isNotEmpty && !_messages.last.isUser) {
-        _flutterTts.speak(_messages.last.text);
+        _speak(_messages.last.text);
       }
     }
   }

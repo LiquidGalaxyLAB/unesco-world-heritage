@@ -29,14 +29,18 @@ class _AuthViewState extends State<AuthView> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _geminiKeyController.text = prefs.getString('gemini_api_key') ?? '';
-      _googleMapKeyController.text = prefs.getString('google_map_api_key') ?? '';
+      _googleMapKeyController.text =
+          prefs.getString('google_map_api_key') ?? '';
     });
   }
 
   Future<void> _saveKeys() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('gemini_api_key', _geminiKeyController.text.trim());
-    await prefs.setString('google_map_api_key', _googleMapKeyController.text.trim());
+    await prefs.setString(
+      'google_map_api_key',
+      _googleMapKeyController.text.trim(),
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('API Keys saved successfully!')),
@@ -74,7 +78,7 @@ class _AuthViewState extends State<AuthView> {
               const SizedBox(height: 12),
               LgConnectionHeader(viewModel: widget.viewModel),
               const SizedBox(height: 60),
-              
+
               // Gemini API Key Section
               Center(
                 child: Text(
@@ -95,15 +99,24 @@ class _AuthViewState extends State<AuthView> {
                 child: TextField(
                   controller: _geminiKeyController,
                   obscureText: _obscureGemini,
-                  style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.onSurface),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: AppColors.onSurface,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Enter Gemini API Key',
-                    hintStyle: const TextStyle(color: AppColors.onSurfaceVariant),
+                    hintStyle: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                    ),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureGemini ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                        _obscureGemini
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_rounded,
                         color: AppColors.onSurfaceVariant,
                       ),
                       onPressed: () {
@@ -137,15 +150,24 @@ class _AuthViewState extends State<AuthView> {
                 child: TextField(
                   controller: _googleMapKeyController,
                   obscureText: _obscureGoogleMap,
-                  style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.onSurface),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: AppColors.onSurface,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Enter Google Map API Key',
-                    hintStyle: const TextStyle(color: AppColors.onSurfaceVariant),
+                    hintStyle: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                    ),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureGoogleMap ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                        _obscureGoogleMap
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_rounded,
                         color: AppColors.onSurfaceVariant,
                       ),
                       onPressed: () {
@@ -175,10 +197,7 @@ class _AuthViewState extends State<AuthView> {
                   ),
                   child: const Text(
                     'Update',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                   ),
                 ),
               ),

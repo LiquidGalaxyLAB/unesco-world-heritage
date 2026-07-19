@@ -24,3 +24,13 @@ plugins {
 }
 
 include(":app")
+
+gradle.beforeProject {
+    if (name == "flutter_pcm_sound") {
+        afterEvaluate {
+            extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+                compileSdk = 36
+            }
+        }
+    }
+}
