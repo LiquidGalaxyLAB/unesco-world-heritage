@@ -200,9 +200,7 @@ class LGRigService {
   Future<void> sendKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
     await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
-    await _client!.run(
-      'echo "\n$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt',
-    );
+    await _client!.run('echo "$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt');
   }
 
   Future<void> uploadKml(String fileName, String content) async {
@@ -213,7 +211,7 @@ class LGRigService {
   Future<void> appendKml(String fileName) async {
     final safeFileName = _validateFileName(fileName);
     await _client!.run(
-      'echo "\n$_lgBaseUrl/$safeFileName" >> $_webRoot/kmls.txt',
+      'echo "$_lgBaseUrl/$safeFileName" >> $_webRoot/kmls.txt',
     );
   }
 
@@ -231,6 +229,11 @@ class LGRigService {
       '$_slaveKmlDirectory/slave_$screen.kml',
       utf8.encode(content.trim()),
     );
+    // Ensure world-readable permissions after SFTP write.
+    // On real LG hardware /var/www/html/kml/ is often owned by www-data;
+    // the SFTP write succeeds but Google Earth on the slave cannot read
+    // the file without this chmod.
+    await _client!.run('chmod 644 $_slaveKmlDirectory/slave_$screen.kml');
   }
 
   Future<void> sendKmlToLeftmostScreen(String content) async {
