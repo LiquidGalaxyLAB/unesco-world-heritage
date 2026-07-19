@@ -25,16 +25,12 @@ class SettingsStorageService {
   Future<Map<String, Object>?> load() async {
     final prefs = await SharedPreferences.getInstance();
     final host = prefs.getString(hostKey);
-    final username = prefs.getString(usernameKey);
+    final username = prefs.getString(usernameKey) ?? 'lg';
     final password = prefs.getString(passwordKey);
-    final port = prefs.getInt(portKey);
-    final screens = prefs.getInt(screensKey);
+    final port = prefs.getInt(portKey) ?? 22;
+    final screens = prefs.getInt(screensKey) ?? 3;
 
-    if (host == null ||
-        username == null ||
-        password == null ||
-        port == null ||
-        screens == null) {
+    if (host == null || password == null) {
       return null;
     }
 
