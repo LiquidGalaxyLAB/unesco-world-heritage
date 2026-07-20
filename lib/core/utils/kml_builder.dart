@@ -675,7 +675,7 @@ class KMLBuilder {
         <bgColor>ff1b1b1b</bgColor>
         <textColor>ffffffff</textColor>
         <text><![CDATA[
-          <div style="width:500px;background:#1f1d1d;border-radius:24px;overflow:hidden;
+          <div style="width:500px;background:#1f1d1d;border-radius:24px;overflow:hidden;transform:scale(2);transform-origin:top left;
                       font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
                       box-shadow:0 16px 36px rgba(0,0,0,0.42);">
             <div style="display:flex;align-items:center;gap:14px;padding:22px 22px 18px 22px;"><!--
@@ -835,18 +835,21 @@ class KMLBuilder {
             // which is the exact opposite of what KML/OpenGL requires.
             // Without this fix, the extruded wall normals point inward and are
             // discarded by backface culling on the Ubuntu cluster screens.
-            outerRing: component.outer.orientation ==
-                    _RingOrientation.counterClockwise
+            outerRing:
+                component.outer.orientation == _RingOrientation.counterClockwise
                 ? component.outer.ring
                 : component.outer.ring.reversed.toList(growable: false),
             innerRings: List<List<List<double>>>.unmodifiable(
-              component.innerRings.map((ring) {
-                // Holes must be CW in KML. Reverse any CCW hole rings.
-                final holeDescriptor = _RingDescriptor.fromRing(ring);
-                return holeDescriptor.orientation == _RingOrientation.clockwise
-                    ? ring
-                    : ring.reversed.toList(growable: false);
-              }).toList(growable: false),
+              component.innerRings
+                  .map((ring) {
+                    // Holes must be CW in KML. Reverse any CCW hole rings.
+                    final holeDescriptor = _RingDescriptor.fromRing(ring);
+                    return holeDescriptor.orientation ==
+                            _RingOrientation.clockwise
+                        ? ring
+                        : ring.reversed.toList(growable: false);
+                  })
+                  .toList(growable: false),
             ),
             centroid: component.outer.centroid,
           ),
