@@ -258,12 +258,7 @@ class KMLBuilder {
     return getKmlSkeleton(content, safeName);
   }
 
-  /// Builds a 2D flat KML polygon (clampToGround) suitable for the phone app
-  /// Google Map or any 2D KML viewer.
-  ///
-  /// Unlike [buildBoundaryKml] which produces 3D extruded walls for
-  /// Liquid Galaxy, this generates ground-level flat polygons with
-  /// category-based colouring and no altitude extrusion.
+  
   static String build2dBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,

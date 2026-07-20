@@ -44,9 +44,6 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   bool _isAudioPlaying = false;
   bool _isMuted = false;
   bool _isOrbitActive = false;
-  // True once the 'Play Audio Story?' dialog has been shown this visit.
-  // Resets when the user navigates to a new site (new widget instance).
-  bool _hasAskedStoryQuestion = false;
   bool _isLgScenePrepared = false;
   bool _isRenderingOnLg = false;
 
@@ -552,16 +549,6 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
           _isOrbitActive = false;
           _isLgScenePrepared = true;
         });
-        // Auto-start orbit after a minimum delay to allow the fly-to animation
-        // to complete on Liquid Galaxy before the orbit begins.
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted &&
-              _isLgScenePrepared &&
-              !_isOrbitActive &&
-              !_isRenderingOnLg) {
-            _autoStartOrbit();
-          }
-        });
       }
     } catch (error) {
       _showSnackBar(error.toString());
@@ -580,33 +567,6 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     if (!widget.settingsViewModel.state.isConnected) {
       _showSnackBar('Connect to Liquid Galaxy first.');
       return;
-    }
-
-    final shouldPlayStory = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surfaceContainerHighest,
-          title: const Text('Play Audio Story?'),
-          content: const Text(
-            'Would you like to hear an AI-generated story about this site?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('No'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Yes'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldPlayStory == true) {
-      _playStory();
     }
 
     await _performFlyTo();
@@ -665,38 +625,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       }
     }
 
-    // Only ask about the audio story on the very first orbit of this visit.
-    if (!mounted || !_isOrbitActive || _hasAskedStoryQuestion) return;
-
-    _hasAskedStoryQuestion = true;
-    final shouldPlayStory = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surfaceContainerHighest,
-          title: const Text('Play Audio Story?'),
-          content: const Text(
-            'Would you like to hear an AI-generated story about this site while orbiting?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('No'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Yes'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (!mounted) return;
-
-    if (shouldPlayStory == true) {
-      _playStory();
-    }
+    if (!mounted || !_isOrbitActive) return;
 
     // Start the countdown so the button resets when the tour ends.
     _startOrbitCompletionTimer();
@@ -758,61 +687,6 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         );
       },
     );
-  }
-
-  /// Starts the orbit silently (no dialog) then prompts the user about the
-  /// audio story. Called automatically after fly-to completes.
-  Future<void> _autoStartOrbit() async {
-    if (_isRenderingOnLg || _isOrbitActive) return;
-    if (!widget.settingsViewModel.state.isConnected) return;
-
-    setState(() => _isRenderingOnLg = true);
-
-    try {
-      await widget.settingsViewModel.startOrbitOnLiquidGalaxy();
-      if (mounted) {
-        setState(() => _isOrbitActive = true);
-      }
-    } catch (error) {
-      _showSnackBar(error.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isRenderingOnLg = false);
-      }
-    }
-
-    // Only ask about the audio story on the very first orbit of this visit.
-    if (!mounted || !_isOrbitActive || _hasAskedStoryQuestion) return;
-
-    _hasAskedStoryQuestion = true;
-    final shouldPlayStory = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surfaceContainerHighest,
-          title: const Text('Play Audio Story?'),
-          content: const Text(
-            'Would you like to hear an AI-generated story about this site while orbiting?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('No'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Yes'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (!mounted) return;
-    if (shouldPlayStory == true) _playStory();
-
-    // Start the countdown so the button resets when the tour ends.
-    _startOrbitCompletionTimer();
   }
 
   /// Starts a one-shot timer that resets [_isOrbitActive] to false once the
