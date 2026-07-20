@@ -203,6 +203,7 @@ class KMLBuilder {
       <styleUrl>#site_boundary</styleUrl>
       <Polygon>
         <extrude>1</extrude>
+        <tessellate>1</tessellate>
         <altitudeMode>relativeToGround</altitudeMode>
         <outerBoundaryIs>
           <LinearRing>
@@ -829,9 +830,23 @@ class KMLBuilder {
     return components
         .map(
           (component) => _PolygonComponent(
-            outerRing: component.outer.ring,
+            // Enforce KML Right-Hand Rule for correct OpenGL/Mesa rendering on
+            // Liquid Galaxy (Ubuntu). ArcGIS returns outer rings as Clockwise,
+            // which is the exact opposite of what KML/OpenGL requires.
+            // Without this fix, the extruded wall normals point inward and are
+            // discarded by backface culling on the Ubuntu cluster screens.
+            outerRing: component.outer.orientation ==
+                    _RingOrientation.counterClockwise
+                ? component.outer.ring
+                : component.outer.ring.reversed.toList(growable: false),
             innerRings: List<List<List<double>>>.unmodifiable(
-              component.innerRings,
+              component.innerRings.map((ring) {
+                // Holes must be CW in KML. Reverse any CCW hole rings.
+                final holeDescriptor = _RingDescriptor.fromRing(ring);
+                return holeDescriptor.orientation == _RingOrientation.clockwise
+                    ? ring
+                    : ring.reversed.toList(growable: false);
+              }).toList(growable: false),
             ),
             centroid: component.outer.centroid,
           ),
