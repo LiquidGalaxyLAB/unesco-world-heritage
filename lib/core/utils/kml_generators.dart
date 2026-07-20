@@ -172,7 +172,14 @@ class KmlGenerators {
   /// 3D extruded KML — golden glowing wall at 150 m (exact Colab match).
   static String generateUnesco3dKml(UnescoSite site) {
     const double height = 150;
-    final coordStr = site.coordinates
+
+    // Enforce KML Right-Hand Rule: outer ring must be Counter-Clockwise.
+    // ArcGIS/GeoJSON sources often supply CW outer rings (Esri convention).
+    // On Liquid Galaxy (Ubuntu + Mesa OpenGL) a CW outer ring produces inward-
+    // pointing normals that are discarded by backface culling → invisible walls.
+    final coords = _ensureCounterClockwise(site.coordinates);
+
+    final coordStr = coords
         .map((p) => '${p[0]},${p[1]},$height')
         .join(' ');
     return '''<?xml version="1.0" encoding="UTF-8"?>
@@ -193,6 +200,7 @@ class KmlGenerators {
       <styleUrl>#glowing_wall</styleUrl>
       <Polygon>
         <extrude>1</extrude>
+        <tessellate>1</tessellate>
         <altitudeMode>relativeToGround</altitudeMode>
         <outerBoundaryIs>
           <LinearRing>
@@ -203,6 +211,22 @@ class KmlGenerators {
     </Placemark>
   </Document>
 </kml>''';
+  }
+
+  /// Returns [ring] in counter-clockwise order.
+  /// Computes the shoelace signed area: positive = CCW (standard math y-up),
+  /// negative = CW. Reverses the list when the ring is CW.
+  static List<List<double>> _ensureCounterClockwise(List<List<double>> ring) {
+    if (ring.length < 3) return ring;
+    var signedArea = 0.0;
+    for (var i = 0; i < ring.length - 1; i++) {
+      // ring[i] is [lon, lat] in kml_generators coordinates
+      signedArea +=
+          (ring[i][0] * ring[i + 1][1]) - (ring[i + 1][0] * ring[i][1]);
+    }
+    // signedArea > 0 → CCW (correct for KML outer ring)
+    // signedArea < 0 → CW  (must be reversed)
+    return signedArea < 0 ? ring.reversed.toList() : ring;
   }
 
   /// Info balloon KML for the rightmost LG screen.
