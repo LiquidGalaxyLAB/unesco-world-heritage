@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -163,7 +164,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
   Future<void> _loadMapHtml() async {
     final prefs = await SharedPreferences.getInstance();
-    final mapsApiKey = prefs.getString('google_map_api_key') ?? '';
+    final configuredMapsApiKey =
+        prefs.getString('google_map_api_key')?.trim() ?? '';
+    final mapsApiKey = configuredMapsApiKey.isNotEmpty
+        ? configuredMapsApiKey
+        : dotenv.env['GOOGLE_MAPS_API_KEY']?.trim() ?? '';
 
     final htmlContent =
         '''
