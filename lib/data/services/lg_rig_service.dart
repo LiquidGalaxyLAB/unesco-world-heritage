@@ -203,6 +203,36 @@ class LGRigService {
     await _client!.run('echo "$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt');
   }
 
+  Future<void> send3dSiteKmlToLG(
+    String content,
+    double centerLat,
+    double centerLng, {
+    double range = 150,
+    double tilt = 45,
+    double bearing = 0,
+    double altitude = 0,
+  }) async {
+    _requireConnection();
+
+    // Ensure the Document has id="slave_2" so it's reliably tracked by LG
+    String kml = content.replaceFirst('<Document>', '<Document id="slave_2">');
+
+    String command =
+        "echo '${kml.replaceAll("'", "'\\''")}' > /var/www/html/kml/slave_2.kml";
+    await _client!.run(command);
+
+    await _client!.run("echo 'http://lg1:81/kml/slave_2.kml' > /var/www/html/kmls.txt");
+
+    String searchQuery = "search=$centerLat,$centerLng";
+    await _client!.run("echo '$searchQuery' > /tmp/query.txt");
+
+    await Future.delayed(const Duration(seconds: 2));
+
+    String flytoQuery =
+        "flytoview=<LookAt><longitude>$centerLng</longitude><latitude>$centerLat</latitude><altitude>$altitude</altitude><heading>$bearing</heading><tilt>$tilt</tilt><range>$range</range></LookAt>";
+    await _client!.run("echo '$flytoQuery' > /tmp/query.txt");
+  }
+
   Future<void> uploadKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
     await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));

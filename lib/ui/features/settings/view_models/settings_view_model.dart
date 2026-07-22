@@ -337,21 +337,16 @@ class SettingsViewModel extends ChangeNotifier {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await _lgRigService.clearMaster();
 
-      // Build the list of concurrent operations:
-      //  • flyTo   — writes to /tmp/query.txt (starts camera animation)
-      //  • sendKml — SFTP-writes boundary.kml + overwrites kmls.txt
-      //  • uploadKml — SFTP-writes orbit.kml (no kmls.txt touch yet)
-      final concurrentOps = <Future<void>>[
-        _lgRigService.flyTo(
-          latitude: latitude,
-          longitude: longitude,
-          altitude: altitude,
-          zoom: range,
-          tilt: tilt,
-          bearing: bearing,
-        ),
-        _lgRigService.sendKml(fileName, kml),
-      ];
+      // Call the exact 3D site KML sending logic matching the reference repo
+      await _lgRigService.send3dSiteKmlToLG(
+        kml,
+        latitude,
+        longitude,
+        range: range,
+        tilt: tilt,
+        bearing: bearing,
+        altitude: altitude,
+      );
 
       final hasOrbit =
           orbitFileName != null &&
@@ -360,13 +355,7 @@ class SettingsViewModel extends ChangeNotifier {
           orbitKml.trim().isNotEmpty;
 
       if (hasOrbit) {
-        concurrentOps.add(_lgRigService.uploadKml(orbitFileName, orbitKml));
-      }
-
-      await Future.wait(concurrentOps);
-
-      // appendKml must run after sendKml completes (both touch kmls.txt).
-      if (hasOrbit) {
+        await _lgRigService.uploadKml(orbitFileName, orbitKml);
         await _lgRigService.appendKml(orbitFileName);
         if (startOrbitAfterRender) {
           // Short pause so Google Earth can parse the freshly-appended tour.
