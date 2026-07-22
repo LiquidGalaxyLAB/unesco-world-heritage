@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -105,7 +106,11 @@ class _HomeViewState extends State<HomeView> {
 
   Future<void> _loadMapHtml() async {
     final prefs = await SharedPreferences.getInstance();
-    final mapsApiKey = prefs.getString('google_map_api_key') ?? '';
+    final configuredMapsApiKey =
+        prefs.getString('google_map_api_key')?.trim() ?? '';
+    final mapsApiKey = configuredMapsApiKey.isNotEmpty
+        ? configuredMapsApiKey
+        : dotenv.env['GOOGLE_MAPS_API_KEY']?.trim() ?? '';
 
     final htmlContent =
         '''
