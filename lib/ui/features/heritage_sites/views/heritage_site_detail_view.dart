@@ -10,6 +10,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../../core/utils/fallback_kml_builder.dart';
 import '../../../../core/utils/kml_builder.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/services/weather_service.dart';
@@ -581,6 +582,83 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     await _performFlyTo();
   }
 
+  Future<void> _handleFallbackKmlPressed() async {
+    if (_isRenderingOnLg) {
+      return;
+    }
+
+    if (!widget.settingsViewModel.state.isConnected) {
+      _showSnackBar('Connect to Liquid Galaxy first.');
+      return;
+    }
+
+    setState(() {
+      _isRenderingOnLg = true;
+    });
+
+    try {
+      final resolvedSite =
+          _detailViewModel.state.site?.propertyId == widget.site.propertyId
+          ? _detailViewModel.state.site!
+          : widget.site;
+      final geometry = await _getSiteGeometry();
+      final cameraProfile = _buildCameraProfile(
+        site: resolvedSite,
+        geometry: geometry,
+      );
+      final fallbackKml = FallbackKmlBuilder.buildNormalized2dKml(
+        name: resolvedSite.name,
+        rings:
+            geometry?.boundary.rings
+                .map(
+                  (ring) => ring
+                      .map((point) => <double>[point.latitude, point.longitude])
+                      .toList(growable: false),
+                )
+                .toList(growable: false) ??
+            const <List<List<double>>>[],
+        fallbackLatitude: resolvedSite.latitude,
+        fallbackLongitude: resolvedSite.longitude,
+        category: resolvedSite.category,
+      );
+      final orbitKml = KMLBuilder.createCityTour(
+        tourName: 'Orbit',
+        latitude: cameraProfile.center.latitude,
+        longitude: cameraProfile.center.longitude,
+        range: cameraProfile.orbitRange,
+        tilt: cameraProfile.tilt,
+        orbitDuration: 30,
+      );
+
+      await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
+        fileName: 'site_${resolvedSite.propertyId}_fallback_2d.kml',
+        kml: fallbackKml,
+        latitude: cameraProfile.center.latitude,
+        longitude: cameraProfile.center.longitude,
+        range: cameraProfile.flyToRange,
+        orbitFileName: 'site_${resolvedSite.propertyId}_fallback_2d_orbit.kml',
+        orbitKml: orbitKml,
+        tilt: cameraProfile.tilt,
+        startOrbitAfterRender: false,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isOrbitActive = false;
+          _isLgScenePrepared = true;
+        });
+      }
+    } catch (error) {
+      _showSnackBar(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRenderingOnLg = false;
+        });
+      }
+    }
+  }
+
   Future<void> _handleOrbitPressed() async {
     if (_isRenderingOnLg) {
       return;
@@ -982,6 +1060,14 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
                         bottom: 16,
                         child: Row(
                           children: [
+                            _buildLgActionButton(
+                              icon: Icons.layers_outlined,
+                              label: 'Fall Back KML',
+                              onPressed: _isRenderingOnLg
+                                  ? null
+                                  : _handleFallbackKmlPressed,
+                            ),
+                            const SizedBox(width: 8),
                             _buildLgActionButton(
                               icon: _isRenderingOnLg
                                   ? Icons.hourglass_top_rounded

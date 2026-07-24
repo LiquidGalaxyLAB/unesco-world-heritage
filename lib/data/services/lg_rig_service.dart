@@ -329,8 +329,8 @@ class LGRigService {
       return;
     }
 
-    final double logoSizeX = settings.screens > 3 ? 613.2 : 554;
-    final double logoSizeY = settings.screens > 3 ? 613.2 : 500;
+    final double logoSizeX = settings.screens > 3 ? 998 : 554;
+    final double logoSizeY = settings.screens > 3 ? 900 : 500;
 
     final overlay = KMLBuilder.screenOverlayImage(
       id: 'logo',

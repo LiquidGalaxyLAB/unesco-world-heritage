@@ -6,8 +6,18 @@ import '../../domain/models/heritage_site.dart';
 class KMLBuilder {
   static const int _denseComponentThreshold = 200;
   static const int _denseComponentRenderLimit = 120;
+
+  /// Reduced component cap for LG — keeps SSH-transferred KML lean.
+  /// 30 polygons is a good balance: complex sites stay readable, simple ones
+  /// render completely, and GPU overhead on the LG cluster stays manageable.
+  static const int _lgComponentRenderLimit = 30;
   static const int _denseCirclePointCount = 72;
   static const int _trajectoryComponentThreshold = 4;
+
+  /// Maximum points per outer ring in LG-simplified mode. Rings with more
+  /// points than this are decimated using uniform stride sampling to keep
+  /// coordinate strings short without distorting the site boundary shape.
+  static const int _lgMaxRingPoints = 80;
 
   final StringBuffer _buffer = StringBuffer();
   bool _hasHeader = false;
@@ -130,12 +140,26 @@ class KMLBuilder {
     return getKmlSkeleton(content, safeName);
   }
 
+  /// Builds a 3-D extruded KML boundary for Liquid Galaxy.
+  ///
+  /// This is simplified for the LG rig by default. Set [simplifyForLg] to
+  /// `false` only when a full-detail 3-D boundary is explicitly required.
+  /// The lightweight output:
+  ///  - rounding coordinates to 3 decimal places (~110 m accuracy)
+  ///  - decimating dense rings to ≤ 80 points per polygon
+  ///  - dropping inner hole rings (barely visible at LG viewing distances)
+  ///  - omitting the trajectory LineString
+  ///  - capping rendered components at 30 (vs. 120 for the in-app map)
+  ///  - reducing extrusion height to 80 m (vs. 150 m) for lower GPU load
   static String buildBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,
     HeritageCategory? category,
+    bool simplifyForLg = true,
   }) {
-    const double extrusionHeight = 150;
+    // 3D extrusion height: reduced for LG to minimise GPU vertex load on the
+    // Ubuntu cluster screens. 80 m is still clearly visible from orbit range.
+    final double extrusionHeight = simplifyForLg ? 80.0 : 150.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings
         .map(_normalizeRing)
@@ -177,25 +201,46 @@ class KMLBuilder {
     }
 
     final isDenseSite = components.length > _denseComponentThreshold;
-    final renderedComponents = isDenseSite
+    final renderedComponents = simplifyForLg
+        ? _sampleComponentsForDenseSite(
+            components,
+            limit: _lgComponentRenderLimit,
+          )
+        : isDenseSite
         ? _sampleComponentsForDenseSite(
             components,
             limit: _denseComponentRenderLimit,
           )
         : components;
+
     final placemarks = <String>[];
     for (var index = 0; index < renderedComponents.length; index++) {
       final component = renderedComponents[index];
+
+      // When simplifying for LG: round coordinates, thin dense rings, and
+      // drop inner holes (barely visible at LG orbit distances).
+      final outerRing = simplifyForLg
+          ? _normalizeSimplifiedRing(
+              _decimateRing(_simplifyRing(component.outerRing)),
+            )
+          : component.outerRing;
+      if (outerRing.length < 4) {
+        continue;
+      }
       final outerBoundary = _buildLinearRing(
-        component.outerRing,
+        outerRing,
         altitude: extrusionHeight,
       );
-      final innerBoundaries = component.innerRings
-          .map(
-            (ring) =>
-                '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
-          )
-          .join();
+
+      // Inner holes: omitted when simplifyForLg is true.
+      final innerBoundaries = simplifyForLg
+          ? ''
+          : component.innerRings
+                .map(
+                  (ring) =>
+                      '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
+                )
+                .join();
 
       placemarks.add('''
     <Placemark>
@@ -215,25 +260,17 @@ class KMLBuilder {
     </Placemark>''');
     }
 
-    final trajectory = _buildTrajectoryPlacemark(
-      name: safeName,
-      components: components,
-    );
-    final denseSiteCircle = isDenseSite
+    // Trajectory and dense-site overview are omitted from the lightweight LG
+    // KML, where they add vertices but no useful boundary detail.
+    final trajectory = simplifyForLg
+        ? ''
+        : _buildTrajectoryPlacemark(name: safeName, components: components);
+    final denseSiteCircle = !simplifyForLg && isDenseSite
         ? _buildDenseSiteCirclePlacemark(name: safeName, components: components)
         : '';
-
-    final content =
-        '''
-    <Style id="site_boundary">
-      <LineStyle>
-        <color>$lineColor</color>
-        <width>4</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>$polyColor</color>
-      </PolyStyle>
-    </Style>
+    final optionalStyles = simplifyForLg
+        ? ''
+        : '''
     <Style id="site_trajectory">
       <LineStyle>
         <color>$lineColor</color>
@@ -251,12 +288,92 @@ class KMLBuilder {
       <PolyStyle>
         <color>1a66f2ff</color>
       </PolyStyle>
+    </Style>''';
+
+    final content =
+        '''
+    <Style id="site_boundary">
+      <LineStyle>
+        <color>$lineColor</color>
+        <width>4</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>$polyColor</color>
+      </PolyStyle>
     </Style>
+    $optionalStyles
     $denseSiteCircle
     ${placemarks.join()}
     $trajectory''';
 
     return getKmlSkeleton(content, safeName);
+  }
+
+  /// Rounds each coordinate in [ring] to 3 decimal places for LG mode.
+  /// 3 d.p. ≈ 110 m accuracy — imperceptible at LG orbit distances,
+  /// but produces ~25 % shorter coordinate strings vs. 4 d.p.
+  static List<List<double>> _simplifyRing(List<List<double>> ring) {
+    return ring
+        .map((p) => <double>[_r3(p[0]), _r3(p[1])])
+        .toList(growable: false);
+  }
+
+  /// Rounds [value] to 3 decimal places.
+  static double _r3(double value) => (value * 1000).roundToDouble() / 1000;
+
+  /// Decimates a ring to at most [_lgMaxRingPoints] points using uniform stride
+  /// sampling. Preserves the first and last (closing) points so the ring
+  /// remains a valid closed polygon. Only applied in LG-simplified mode.
+  static List<List<double>> _decimateRing(List<List<double>> ring) {
+    if (ring.length <= _lgMaxRingPoints) return ring;
+
+    final result = <List<double>>[];
+    // Always keep first point.
+    result.add(ring.first);
+
+    // Sample interior points uniformly.
+    final interior = ring.sublist(1, ring.length - 1);
+    final step = math.max(1, (interior.length / (_lgMaxRingPoints - 2)).ceil());
+    for (var i = 0; i < interior.length; i += step) {
+      result.add(interior[i]);
+      if (result.length >= _lgMaxRingPoints - 1) break;
+    }
+
+    // Always keep closing point.
+    result.add(ring.last);
+    return result;
+  }
+
+  /// Restores a valid closed ring after coordinate rounding. Adjacent points
+  /// can become identical at 3 decimal places, so they must be removed before
+  /// writing the simplified 3-D polygon.
+  static List<List<double>> _normalizeSimplifiedRing(List<List<double>> ring) {
+    final normalizedRing = <List<double>>[];
+    for (final point in ring) {
+      if (normalizedRing.isEmpty ||
+          normalizedRing.last[0] != point[0] ||
+          normalizedRing.last[1] != point[1]) {
+        normalizedRing.add(<double>[point[0], point[1]]);
+      }
+    }
+
+    if (normalizedRing.length < 2) {
+      return const <List<double>>[];
+    }
+
+    final first = normalizedRing.first;
+    final last = normalizedRing.last;
+    if (first[0] != last[0] || first[1] != last[1]) {
+      normalizedRing.add(<double>[first[0], first[1]]);
+    }
+
+    final distinctVertices = <String>{
+      for (final point in normalizedRing.take(normalizedRing.length - 1))
+        '${point[0]},${point[1]}',
+    };
+    return distinctVertices.length >= 3
+        ? normalizedRing
+        : const <List<double>>[];
   }
 
   /// Builds a 2D flat KML polygon (clampToGround) suitable for the phone app
@@ -450,20 +567,34 @@ class KMLBuilder {
 </kml>''';
   }
 
+  /// Builds a smooth 360° orbit tour for Liquid Galaxy.
+  ///
+  /// Uses 36 keyframes at 10° increments (vs the old 18 × 20°) so Google
+  /// Earth interpolates smaller heading deltas — eliminating the visible
+  /// jerking between steps that occurred with large heading jumps.
+  ///
+  /// The first keyframe uses [gx:flyToMode = bounce] so the camera anchors
+  /// cleanly to the site from wherever it currently is, then the smooth
+  /// sweep begins from a known position — preventing the jarring snap that
+  /// happened when [smooth] tried to interpolate from an arbitrary camera
+  /// position across the globe.
   static String createCityTour({
     required String tourName,
     required double latitude,
     required double longitude,
     double range = 5000,
     double tilt = 60,
-    double orbitDuration = 5.0,
+    double orbitDuration = 30.0,
   }) {
-    StringBuffer playlist = StringBuffer();
+    final StringBuffer playlist = StringBuffer();
 
+    // Anchor keyframe — brings the camera to the site cleanly before the
+    // orbit begins. 'bounce' mode does a fast zoom-in without interpolating
+    // through intermediate world space (avoids skimming the globe).
     playlist.write('''
       <gx:FlyTo>
-        <gx:duration>1.0</gx:duration>
-        <gx:flyToMode>smooth</gx:flyToMode>
+        <gx:duration>1.5</gx:duration>
+        <gx:flyToMode>bounce</gx:flyToMode>
         <LookAt>
           <longitude>$longitude</longitude>
           <latitude>$latitude</latitude>
@@ -475,11 +606,13 @@ class KMLBuilder {
       </gx:FlyTo>
     ''');
 
-    const int steps = 18;
-    double stepDuration = orbitDuration / steps;
+    // 36 smooth keyframes × 10° = one full 360° orbit.
+    // Each step duration = (orbitDuration - 1.5 anchor) / 36 steps.
+    const int steps = 36;
+    final double stepDuration = ((orbitDuration - 1.5) / steps).clamp(0.5, 3.0);
 
     for (int i = 1; i <= steps; i++) {
-      double heading = (i * 20.0) % 360;
+      final double heading = (i * 10.0) % 360;
       playlist.write('''
       <gx:FlyTo>
         <gx:duration>$stepDuration</gx:duration>
@@ -496,18 +629,12 @@ class KMLBuilder {
       ''');
     }
 
-    playlist.write('''
-      <gx:Wait>
-        <gx:duration>2.0</gx:duration>
-      </gx:Wait>
-    ''');
-
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
   <Document>
     <name>$tourName</name>
     <gx:Tour>
-      <name>$tourName</name>
+      <name>Orbit</name>
       <gx:Playlist>
         $playlist
       </gx:Playlist>
@@ -675,7 +802,7 @@ class KMLBuilder {
         <bgColor>ff1b1b1b</bgColor>
         <textColor>ffffffff</textColor>
         <text><![CDATA[
-          <div style="width:700px;background:#1f1d1d;border-radius:24px;overflow:hidden;
+          <div style="width:840px;min-height:920px;background:#1f1d1d;border-radius:24px;overflow:hidden;
                       font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
                       box-shadow:0 16px 36px rgba(0,0,0,0.42);">
             <div style="display:flex;align-items:center;gap:14px;padding:22px 22px 18px 22px;"><!--
