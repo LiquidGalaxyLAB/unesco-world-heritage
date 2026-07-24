@@ -675,7 +675,7 @@ class KMLBuilder {
         <bgColor>ff1b1b1b</bgColor>
         <textColor>ffffffff</textColor>
         <text><![CDATA[
-          <div style="width:700px;background:#1f1d1d;border-radius:24px;overflow:hidden;
+          <div style="width:840px;min-height:920px;background:#1f1d1d;border-radius:24px;overflow:hidden;
                       font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
                       box-shadow:0 16px 36px rgba(0,0,0,0.42);">
             <div style="display:flex;align-items:center;gap:14px;padding:22px 22px 18px 22px;"><!--

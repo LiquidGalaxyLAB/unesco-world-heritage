@@ -197,17 +197,31 @@ class LGRigService {
     );
   }
 
+  /// Writes a KML file to the LG web root and registers it in kmls.txt so
+  /// Google Earth auto-loads it.  Uses SSH echo (Open Buildings pattern) —
+  /// no SFTP session required for text KML content.
   Future<void> sendKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
-    await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
-    await _client!.run('echo "$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt');
+    final escaped = content.replaceAll("'", "'\\'')");
+    await _client!.run(
+      "echo '$escaped' > $_webRoot/$safeFileName",
+    );
+    await _client!.run(
+      'echo "$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt',
+    );
   }
 
+  /// Writes a KML file to the LG web root without touching kmls.txt.
+  /// Used for orbit / tour KML that is appended separately.
   Future<void> uploadKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
-    await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
+    final escaped = content.replaceAll("'", "'\\'')");
+    await _client!.run(
+      "echo '$escaped' > $_webRoot/$safeFileName",
+    );
   }
 
+  /// Appends a KML file URL to kmls.txt (called after uploadKml for orbit).
   Future<void> appendKml(String fileName) async {
     final safeFileName = _validateFileName(fileName);
     await _client!.run(
@@ -215,6 +229,9 @@ class LGRigService {
     );
   }
 
+  /// Writes KML directly to a slave screen file via SSH echo (Open Buildings
+  /// pattern).  No SFTP session is needed; the echo command is sufficient
+  /// and the file is world-readable by default under /var/www/html/kml/.
   Future<void> sendKmlToSlave(int screen, String content) async {
     final settings = _requireConnection();
     if (screen < 2 || screen > settings.screens) {
@@ -225,15 +242,10 @@ class LGRigService {
       );
     }
 
-    await _writeRemoteFile(
-      '$_slaveKmlDirectory/slave_$screen.kml',
-      utf8.encode(content.trim()),
+    final escaped = content.trim().replaceAll("'", "'\\'')");
+    await _client!.run(
+      "echo '$escaped' > $_slaveKmlDirectory/slave_$screen.kml",
     );
-    // Ensure world-readable permissions after SFTP write.
-    // On real LG hardware /var/www/html/kml/ is often owned by www-data;
-    // the SFTP write succeeds but Google Earth on the slave cannot read
-    // the file without this chmod.
-    await _client!.run('chmod 644 $_slaveKmlDirectory/slave_$screen.kml');
   }
 
   Future<void> sendKmlToLeftmostScreen(String content) async {
@@ -329,8 +341,8 @@ class LGRigService {
       return;
     }
 
-    final double logoSizeX = settings.screens > 3 ? 613.2 : 554;
-    final double logoSizeY = settings.screens > 3 ? 613.2 : 500;
+    final double logoSizeX = settings.screens > 3 ? 998 : 554;
+    final double logoSizeY = settings.screens > 3 ? 900 : 500;
 
     final overlay = KMLBuilder.screenOverlayImage(
       id: 'logo',

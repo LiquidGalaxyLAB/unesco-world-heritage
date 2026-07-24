@@ -337,10 +337,12 @@ class SettingsViewModel extends ChangeNotifier {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await _lgRigService.clearMaster();
 
-      // Build the list of concurrent operations:
-      //  • flyTo   — writes to /tmp/query.txt (starts camera animation)
-      //  • sendKml — SFTP-writes boundary.kml + overwrites kmls.txt
-      //  • uploadKml — SFTP-writes orbit.kml (no kmls.txt touch yet)
+      // ── Open Buildings pattern ────────────────────────────────────────────
+      // 1. Set slaves refresh so Google Earth picks up the new KML files.
+      await _lgRigService.resetRefresh();
+      await _lgRigService.setRefresh();
+
+      // 2. Fly to the site + write boundary KML + write orbit KML concurrently.
       final concurrentOps = <Future<void>>[
         _lgRigService.flyTo(
           latitude: latitude,
@@ -365,7 +367,7 @@ class SettingsViewModel extends ChangeNotifier {
 
       await Future.wait(concurrentOps);
 
-      // appendKml must run after sendKml completes (both touch kmls.txt).
+      // 3. Append orbit URL to kmls.txt after boundary is registered.
       if (hasOrbit) {
         await _lgRigService.appendKml(orbitFileName);
         if (startOrbitAfterRender) {
@@ -374,6 +376,10 @@ class SettingsViewModel extends ChangeNotifier {
           await _lgRigService.startOrbit();
         }
       }
+
+      // 4. Reset refresh — remove the refreshMode/refreshInterval entries.
+      await _lgRigService.resetRefresh();
+      // ─────────────────────────────────────────────────────────────────────
 
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
@@ -387,6 +393,7 @@ class SettingsViewModel extends ChangeNotifier {
 
     notifyListeners();
   }
+
 
   Future<void> renderKmlOnLeftmostScreen({
     required String kml,
