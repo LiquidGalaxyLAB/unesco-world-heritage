@@ -198,14 +198,14 @@ class LGRigService {
   }
 
   /// Writes a KML file to the LG web root and registers it in kmls.txt so
-  /// Google Earth auto-loads it.  Uses SSH echo (Open Buildings pattern) —
-  /// no SFTP session required for text KML content.
+  /// Google Earth auto-loads it.
+  ///
+  /// KML content is written via SFTP (no ARG_MAX shell limit — safe for large
+  /// multi-polygon boundary files).  Only the short kmls.txt registration line
+  /// uses SSH echo.
   Future<void> sendKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
-    final escaped = content.replaceAll("'", "'\\'')");
-    await _client!.run(
-      "echo '$escaped' > $_webRoot/$safeFileName",
-    );
+    await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
     await _client!.run(
       'echo "$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt',
     );
@@ -213,12 +213,10 @@ class LGRigService {
 
   /// Writes a KML file to the LG web root without touching kmls.txt.
   /// Used for orbit / tour KML that is appended separately.
+  /// Uses SFTP so large tour files do not hit the SSH shell command-length limit.
   Future<void> uploadKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
-    final escaped = content.replaceAll("'", "'\\'')");
-    await _client!.run(
-      "echo '$escaped' > $_webRoot/$safeFileName",
-    );
+    await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
   }
 
   /// Appends a KML file URL to kmls.txt (called after uploadKml for orbit).
@@ -229,9 +227,10 @@ class LGRigService {
     );
   }
 
-  /// Writes KML directly to a slave screen file via SSH echo (Open Buildings
-  /// pattern).  No SFTP session is needed; the echo command is sufficient
-  /// and the file is world-readable by default under /var/www/html/kml/.
+  /// Writes KML directly to a slave screen file.
+  ///
+  /// Uses SFTP for the file write (safe for any KML size) then SSH echo for
+  /// the short permission fix — avoids ARG_MAX shell limit on large files.
   Future<void> sendKmlToSlave(int screen, String content) async {
     final settings = _requireConnection();
     if (screen < 2 || screen > settings.screens) {
@@ -242,10 +241,13 @@ class LGRigService {
       );
     }
 
-    final escaped = content.trim().replaceAll("'", "'\\'')");
-    await _client!.run(
-      "echo '$escaped' > $_slaveKmlDirectory/slave_$screen.kml",
+    await _writeRemoteFile(
+      '$_slaveKmlDirectory/slave_$screen.kml',
+      utf8.encode(content.trim()),
     );
+    // Ensure world-readable permissions so Google Earth on slave screens
+    // can read the file (owner is typically the SSH user, not www-data).
+    await _client!.run('chmod 644 $_slaveKmlDirectory/slave_$screen.kml');
   }
 
   Future<void> sendKmlToLeftmostScreen(String content) async {

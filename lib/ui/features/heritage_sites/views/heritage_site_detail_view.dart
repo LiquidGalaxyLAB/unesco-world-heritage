@@ -884,6 +884,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             )
             .toList(growable: false),
         category: site.category,
+        simplifyForLg: true, // leaner KML for LG SSH/SFTP transfer
       );
     }
 

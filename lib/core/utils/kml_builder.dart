@@ -6,6 +6,9 @@ import '../../domain/models/heritage_site.dart';
 class KMLBuilder {
   static const int _denseComponentThreshold = 200;
   static const int _denseComponentRenderLimit = 120;
+  /// Reduced component cap used when [buildBoundaryKml] is called with
+  /// `simplifyForLg: true` — keeps the SSH-transferred KML lean.
+  static const int _lgComponentRenderLimit = 60;
   static const int _denseCirclePointCount = 72;
   static const int _trajectoryComponentThreshold = 4;
 
@@ -130,10 +133,19 @@ class KMLBuilder {
     return getKmlSkeleton(content, safeName);
   }
 
+  /// Builds a 3-D extruded KML boundary for Liquid Galaxy.
+  ///
+  /// Set [simplifyForLg] to `true` when the KML will be sent over SSH/SFTP
+  /// to the LG rig. This produces a leaner file by:
+  ///  - rounding coordinates to 4 decimal places (~11 m accuracy)
+  ///  - dropping inner hole rings (barely visible at LG viewing distances)
+  ///  - omitting the trajectory LineString
+  ///  - capping rendered components at 60 (instead of 120)
   static String buildBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,
     HeritageCategory? category,
+    bool simplifyForLg = false,
   }) {
     const double extrusionHeight = 150;
     final safeName = _escapeXml(name);
@@ -177,25 +189,34 @@ class KMLBuilder {
     }
 
     final isDenseSite = components.length > _denseComponentThreshold;
+    final componentLimit =
+        simplifyForLg ? _lgComponentRenderLimit : _denseComponentRenderLimit;
     final renderedComponents = isDenseSite
-        ? _sampleComponentsForDenseSite(
-            components,
-            limit: _denseComponentRenderLimit,
-          )
+        ? _sampleComponentsForDenseSite(components, limit: componentLimit)
         : components;
+
     final placemarks = <String>[];
     for (var index = 0; index < renderedComponents.length; index++) {
       final component = renderedComponents[index];
+
+      // When simplifying for LG, round coordinates and drop inner holes.
+      final outerRing = simplifyForLg
+          ? _simplifyRing(component.outerRing)
+          : component.outerRing;
       final outerBoundary = _buildLinearRing(
-        component.outerRing,
+        outerRing,
         altitude: extrusionHeight,
       );
-      final innerBoundaries = component.innerRings
-          .map(
-            (ring) =>
-                '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
-          )
-          .join();
+
+      // Inner holes: omitted when simplifyForLg is true.
+      final innerBoundaries = simplifyForLg
+          ? ''
+          : component.innerRings
+                .map(
+                  (ring) =>
+                      '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
+                )
+                .join();
 
       placemarks.add('''
     <Placemark>
@@ -215,16 +236,15 @@ class KMLBuilder {
     </Placemark>''');
     }
 
-    final trajectory = _buildTrajectoryPlacemark(
-      name: safeName,
-      components: components,
-    );
+    // Trajectory and dense-site circle: trajectory omitted when simplifyForLg.
+    final trajectory = simplifyForLg
+        ? ''
+        : _buildTrajectoryPlacemark(name: safeName, components: components);
     final denseSiteCircle = isDenseSite
         ? _buildDenseSiteCirclePlacemark(name: safeName, components: components)
         : '';
 
-    final content =
-        '''
+    final content = '''
     <Style id="site_boundary">
       <LineStyle>
         <color>$lineColor</color>
@@ -258,6 +278,17 @@ class KMLBuilder {
 
     return getKmlSkeleton(content, safeName);
   }
+
+  /// Rounds each coordinate in [ring] to 4 decimal places to reduce KML size.
+  static List<List<double>> _simplifyRing(List<List<double>> ring) {
+    return ring
+        .map((p) => <double>[_r4(p[0]), _r4(p[1])])
+        .toList(growable: false);
+  }
+
+  /// Rounds [value] to 4 decimal places.
+  static double _r4(double value) =>
+      (value * 10000).roundToDouble() / 10000;
 
   /// Builds a 2D flat KML polygon (clampToGround) suitable for the phone app
   /// Google Map or any 2D KML viewer.
