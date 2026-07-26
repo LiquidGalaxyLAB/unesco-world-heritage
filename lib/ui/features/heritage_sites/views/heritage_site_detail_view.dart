@@ -98,8 +98,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel('MapSync', onMessageReceived: _onMapCameraChanged);
 
-    _loadMapHtml();
-    _renderBoundaryPolygonOnMap();
+    _initializeMap();
 
     // Auto-start sync if LG is already connected when this view opens.
     if (widget.settingsViewModel.state.isConnected) {
@@ -271,6 +270,17 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 ''';
 
     await _mapController.loadHtmlString(htmlContent);
+  }
+
+  /// Loads the JavaScript map host before sending the first boundary render.
+  /// This prevents the initial site's polygon call from arriving before
+  /// `window.addSitePolygons` has been defined in the WebView.
+  Future<void> _initializeMap() async {
+    await _loadMapHtml();
+    if (!mounted) {
+      return;
+    }
+    await _renderBoundaryPolygonOnMap();
   }
 
   /// Fetches the site geometry and renders 2D polygon boundaries on the
