@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/utils/kml_builder.dart';
 import '../../../../data/services/lg_rig_service.dart';
 import '../../../../domain/models/lg_connection_settings.dart';
 import '../../../../domain/repositories/lg_settings_repository.dart';
@@ -337,10 +338,14 @@ class SettingsViewModel extends ChangeNotifier {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await _lgRigService.clearMaster();
 
-      // Build the list of concurrent operations:
-      //  • flyTo   — writes to /tmp/query.txt (starts camera animation)
-      //  • sendKml — SFTP-writes boundary.kml + overwrites kmls.txt
-      //  • uploadKml — SFTP-writes orbit.kml (no kmls.txt touch yet)
+      final hasOrbit = orbitKml != null && orbitKml.trim().isNotEmpty;
+      final masterKml = hasOrbit
+          ? KMLBuilder.combineKmlDocuments(
+              name: fileName,
+              documents: <String>[kml, orbitKml],
+            )
+          : kml;
+
       final concurrentOps = <Future<void>>[
         _lgRigService.flyTo(
           latitude: latitude,
@@ -350,29 +355,14 @@ class SettingsViewModel extends ChangeNotifier {
           tilt: tilt,
           bearing: bearing,
         ),
-        _lgRigService.sendKml(fileName, kml),
+        _lgRigService.sendKml('master.kml', masterKml),
       ];
-
-      final hasOrbit =
-          orbitFileName != null &&
-          orbitFileName.trim().isNotEmpty &&
-          orbitKml != null &&
-          orbitKml.trim().isNotEmpty;
-
-      if (hasOrbit) {
-        concurrentOps.add(_lgRigService.uploadKml(orbitFileName, orbitKml));
-      }
 
       await Future.wait(concurrentOps);
 
-      // appendKml must run after sendKml completes (both touch kmls.txt).
-      if (hasOrbit) {
-        await _lgRigService.appendKml(orbitFileName);
-        if (startOrbitAfterRender) {
-          // Short pause so Google Earth can parse the freshly-appended tour.
-          await Future<void>.delayed(const Duration(seconds: 2));
-          await _lgRigService.startOrbit();
-        }
+      if (hasOrbit && startOrbitAfterRender) {
+        await Future<void>.delayed(const Duration(milliseconds: 2500));
+        await _lgRigService.startOrbit();
       }
 
       _state = _state.copyWith(isLoading: false);

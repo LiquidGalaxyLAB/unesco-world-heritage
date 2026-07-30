@@ -49,9 +49,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   bool _isLgScenePrepared = false;
   bool _isRenderingOnLg = false;
 
-  // Timer that resets the orbit button when the KML tour finishes on LG.
-  // The tour duration is 30 s; we add a 2 s buffer for LG processing.
-  static const int _orbitTourDurationSeconds = 30;
+  static const int _orbitTourDurationSeconds = 24;
   Timer? _orbitCompletionTimer;
   late final WebViewController _mapController;
   late final UnescoSiteGeometryRepository _geometryRepository;
@@ -415,7 +413,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       longitude: cameraProfile.center.longitude,
       range: cameraProfile.orbitRange,
       tilt: cameraProfile.tilt,
-      orbitDuration: 30,
+      orbitDuration: 20,
     );
     final balloonDescription = resolvedSite.shortDescription.trim().isNotEmpty
         ? resolvedSite.shortDescription.trim()
@@ -637,7 +635,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         longitude: cameraProfile.center.longitude,
         range: cameraProfile.orbitRange,
         tilt: cameraProfile.tilt,
-        orbitDuration: 30,
+        orbitDuration: 20,
       );
 
       await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
@@ -818,7 +816,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   void _startOrbitCompletionTimer() {
     _orbitCompletionTimer?.cancel();
     _orbitCompletionTimer = Timer(
-      const Duration(seconds: _orbitTourDurationSeconds + 2),
+      const Duration(seconds: _orbitTourDurationSeconds),
       () {
         if (mounted && _isOrbitActive) {
           setState(() => _isOrbitActive = false);
