@@ -803,13 +803,78 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
   }
 
+  /// Returns the bounding box of the single largest outer polygon ring in
+  /// [geometry], identified by the shoelace signed-area formula (same method
+  /// used by [_RingDescriptor] in the KML builder). For multi-component sites
+  /// this focuses the flyTo camera on the biggest cluster instead of the
+  /// full scattered extent of every tiny satellite polygon.
+  _GeometryBounds _findLargestComponentBounds(
+    HeritagePolygonGeometry geometry,
+  ) {
+    if (geometry.rings.isEmpty) return const _GeometryBounds.empty();
+
+    List<HeritageGeoPoint>? largestRing;
+    double largestArea = 0;
+
+    for (final ring in geometry.rings) {
+      if (ring.length < 4) continue;
+      // Shoelace formula: area of the ring in degree-squared units.
+      var signedArea = 0.0;
+      for (var i = 0; i < ring.length - 1; i++) {
+        signedArea +=
+            (ring[i].longitude * ring[i + 1].latitude) -
+            (ring[i + 1].longitude * ring[i].latitude);
+      }
+      final area = signedArea.abs() / 2;
+      if (area > largestArea) {
+        largestArea = area;
+        largestRing = ring;
+      }
+    }
+
+    if (largestRing == null || largestRing.length < 4) {
+      return const _GeometryBounds.empty();
+    }
+
+    var minLat = double.infinity;
+    var maxLat = double.negativeInfinity;
+    var minLng = double.infinity;
+    var maxLng = double.negativeInfinity;
+    for (final point in largestRing) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLng) minLng = point.longitude;
+      if (point.longitude > maxLng) maxLng = point.longitude;
+    }
+
+    if (!minLat.isFinite || !minLng.isFinite) {
+      return const _GeometryBounds.empty();
+    }
+
+    return _GeometryBounds(
+      minLatitude: minLat,
+      maxLatitude: maxLat,
+      minLongitude: minLng,
+      maxLongitude: maxLng,
+    );
+  }
+
   _SiteCameraProfile _buildCameraProfile({
     required HeritageSite site,
     HeritageSiteGeometry? geometry,
   }) {
+    // Determine rig size once so both flyToRange and tilt use the same value.
+    final int screens = widget.settingsViewModel.state.settings?.screens ?? 3;
+    final bool isLargeRig = screens > 3;
+
     final hasBoundary = geometry != null && !geometry.boundary.isEmpty;
+    // For multi-component sites (more than one ring) focus the camera on the
+    // largest polygon component rather than the full scattered extent.
+    // Single-component sites use the existing full-bounds path unchanged.
     final bounds = hasBoundary
-        ? _calculateGeometryBounds(geometry.boundary)
+        ? (geometry!.boundary.rings.length > 1
+              ? _findLargestComponentBounds(geometry.boundary)
+              : _calculateGeometryBounds(geometry.boundary))
         : const _GeometryBounds.empty();
     final center = bounds.isValid
         ? _calculateGeometryCenter(bounds)
@@ -817,13 +882,22 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     final orbitRange = bounds.isValid
         ? _calculateAdaptiveOrbitRange(bounds, center.latitude)
         : _fallbackOrbitRange(site.category);
-    final flyToRange = _clampRange(orbitRange * 0.72, min: 1800, max: 320000);
+
+    // Large rigs (>3 screens) use a tighter min so the camera always lands
+    // close enough to see the taller 280 m extrusion. 3-screen rigs keep a
+    // slightly more relaxed 1,800 m min with 120 m extrusion.
+    final double flyToMin = isLargeRig ? 1200 : 1800;
+    final flyToRange = _clampRange(
+      orbitRange * 0.65,
+      min: flyToMin,
+      max: 12000,
+    );
 
     return _SiteCameraProfile(
       center: center,
       flyToRange: flyToRange,
       orbitRange: orbitRange,
-      tilt: _adaptiveTilt(orbitRange),
+      tilt: _adaptiveTilt(orbitRange, isLargeRig: isLargeRig),
     );
   }
 
@@ -865,20 +939,25 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     }
   }
 
-  double _adaptiveTilt(double orbitRange) {
+  double _adaptiveTilt(double orbitRange, {bool isLargeRig = false}) {
+    // Tilt is based on orbit range (camera distance) and rig size.
+    // Large rigs (>3 screens) use a steeper close-in tilt (65°) so the taller
+    // 280 m extruded walls read clearly as a 3D shape across the panorama.
+    // 3-screen rigs cap at 60° which suits the narrower viewport.
     if (orbitRange >= 150000) {
-      return 40;
-    }
-    if (orbitRange >= 80000) {
       return 45;
     }
-    if (orbitRange >= 25000) {
+    if (orbitRange >= 80000) {
       return 50;
     }
-    if (orbitRange >= 15000) {
+    if (orbitRange >= 25000) {
       return 55;
     }
-    return 60;
+    if (orbitRange >= 8000) {
+      return 60;
+    }
+    // Only large rigs go to 65° — 3-screen rigs stay at 60°.
+    return isLargeRig ? 65 : 60;
   }
 
   double _clampRange(double value, {required double min, required double max}) {
@@ -890,6 +969,8 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     HeritageSiteGeometry? geometry,
   }) {
     if (geometry != null && !geometry.boundary.isEmpty) {
+      final int screens = widget.settingsViewModel.state.settings?.screens ?? 3;
+      final bool isLargeRig = screens > 3;
       return KMLBuilder.buildBoundaryKml(
         name: site.name,
         rings: geometry.boundary.rings
@@ -900,6 +981,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             )
             .toList(growable: false),
         category: site.category,
+        isLargeRig: isLargeRig,
       );
     }
 

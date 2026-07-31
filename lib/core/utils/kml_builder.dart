@@ -192,10 +192,17 @@ $content
     required List<List<List<double>>> rings,
     HeritageCategory? category,
     bool simplifyForLg = true,
+    bool isLargeRig = false,
   }) {
-    // 3D extrusion height: reduced for LG to minimise GPU vertex load on the
-    // Ubuntu cluster screens. 100 m is still clearly visible from orbit range.
-    final double extrusionHeight = simplifyForLg ? 120.0 : 150.0;
+    // 3D extrusion height depends on both the render mode and rig size:
+    //  • simplifyForLg + isLargeRig (>3 screens) → 280 m: tall enough to read
+    //    as a solid 3D shape across a wide panoramic display.
+    //  • simplifyForLg + 3 screens              → 120 m: shorter walls that
+    //    suit the narrower single-screen viewport without GPU over-load.
+    //  • full detail (!simplifyForLg)            → 300 m for any rig size.
+    final double extrusionHeight = simplifyForLg
+        ? (isLargeRig ? 280.0 : 120.0)
+        : 300.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings
         .map(_normalizeRing)
@@ -776,19 +783,19 @@ $content
         ? '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:18px 0 0 0;border-collapse:collapse;border:1px solid #3a3636;background:#252323;">'
               '<tr>'
               '<td width="33%" valign="top" align="center" style="width:33%;padding:12px 6px;text-align:center;border-right:1px solid #3a3636;white-space:nowrap;">'
-              '<span style="font-size:22px;">&#127777;</span><br/>'
-              '<span style="font-size:18px;font-weight:700;color:#ffffff;">$safeTemperature</span><br/>'
-              '<span style="font-size:12px;color:#aaaaaa;">Temperature</span>'
+              '<span style="font-size:29px;">&#127777;</span><br/>'
+              '<span style="font-size:23px;font-weight:700;color:#ffffff;">$safeTemperature</span><br/>'
+              '<span style="font-size:16px;color:#aaaaaa;">Temperature</span>'
               '</td>'
               '<td width="34%" valign="top" align="center" style="width:34%;padding:12px 6px;text-align:center;border-right:1px solid #3a3636;white-space:nowrap;">'
-              '<span style="font-size:22px;">&#127788;</span><br/>'
-              '<span style="font-size:18px;font-weight:700;color:#ffffff;">$safeWindSpeed</span><br/>'
-              '<span style="font-size:12px;color:#aaaaaa;">Wind Speed</span>'
+              '<span style="font-size:29px;">&#127788;</span><br/>'
+              '<span style="font-size:23px;font-weight:700;color:#ffffff;">$safeWindSpeed</span><br/>'
+              '<span style="font-size:16px;color:#aaaaaa;">Wind Speed</span>'
               '</td>'
               '<td width="33%" valign="top" align="center" style="width:33%;padding:12px 6px;text-align:center;white-space:nowrap;">'
-              '<span style="font-size:22px;">&#127758;</span><br/>'
-              '<span style="font-size:18px;font-weight:700;color:#ffffff;">$safeBestTimeToVisit</span><br/>'
-              '<span style="font-size:12px;color:#aaaaaa;">Best Time</span>'
+              '<span style="font-size:29px;">&#127758;</span><br/>'
+              '<span style="font-size:23px;font-weight:700;color:#ffffff;">$safeBestTimeToVisit</span><br/>'
+              '<span style="font-size:16px;color:#aaaaaa;">Best Time</span>'
               '</td>'
               '</tr>'
               '</table>'
@@ -808,13 +815,13 @@ $content
                       font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
                       box-shadow:0 16px 36px rgba(0,0,0,0.42);">
             <div style="display:flex;align-items:center;gap:14px;padding:0 22px 18px 22px;">
-              <div style="font-size:26px;line-height:1;color:#ffffff;">&#128205;</div>
-              <div style="font-size:26px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
+              <div style="font-size:34px;line-height:1;color:#ffffff;">&#128205;</div>
+              <div style="font-size:34px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
             </div>
             $imageSection
             $climateStrip
             <div style="padding:22px 22px 24px 22px;">
-              <p style="margin:0;font-size:20px;line-height:1.45;color:#f0f0f0;">$safeDescription</p>
+              <p style="margin:0;font-size:26px;line-height:1.45;color:#f0f0f0;">$safeDescription</p>
             </div>
           </div>
         ]]></text>
