@@ -539,25 +539,29 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     });
 
     try {
-      // Start removing the previous site's balloon before awaiting geometry and
-      // climate data for the next one. This keeps the rightmost screen blank
-      // while the main rig begins its FlyTo transition.
+      // Clear the previous site and its balloon before awaiting geometry and
+      // climate data for the next one.
+      final clearSiteKmlFuture = widget.settingsViewModel.clearSiteKml();
       final clearBalloonFuture = widget.settingsViewModel
           .clearRightmostScreen();
       final payload = await _buildLgRenderPayload();
 
       await Future.wait([
-        widget.settingsViewModel.renderKmlOnLiquidGalaxy(
-          fileName: 'site_${widget.site.propertyId}.kml',
-          kml: payload.boundaryKml,
-          latitude: payload.cameraProfile.center.latitude,
-          longitude: payload.cameraProfile.center.longitude,
-          range: payload.cameraProfile.flyToRange,
-          orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
-          orbitKml: payload.orbitKml,
-          tilt: payload.cameraProfile.tilt,
-          startOrbitAfterRender: false,
-        ),
+        () async {
+          await clearSiteKmlFuture;
+          await widget.settingsViewModel.renderKmlOnLiquidGalaxy(
+            fileName: 'site_${widget.site.propertyId}.kml',
+            kml: payload.boundaryKml,
+            latitude: payload.cameraProfile.center.latitude,
+            longitude: payload.cameraProfile.center.longitude,
+            range: payload.cameraProfile.flyToRange,
+            orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
+            orbitKml: payload.orbitKml,
+            tilt: payload.cameraProfile.tilt,
+            startOrbitAfterRender: false,
+            clearExistingKml: false,
+          );
+        }(),
         () async {
           await clearBalloonFuture;
           await widget.settingsViewModel.renderKmlOnRightmostScreen(

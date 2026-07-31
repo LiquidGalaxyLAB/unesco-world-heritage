@@ -181,9 +181,7 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // The settings action clears only the master/site scene. The logo and
-      // site-information balloon live on slave screens and remain visible.
-      await _lgRigService.clearMaster();
+      await clearSiteKml();
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
       _state = _state.copyWith(
@@ -192,6 +190,14 @@ class SettingsViewModel extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  /// Clears only the master/site KML, preserving slave-screen overlays.
+  Future<void> clearSiteKml() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+    await _lgRigService.clearMaster();
   }
 
   Future<void> sendClearLogoCommand() async {
@@ -327,6 +333,7 @@ class SettingsViewModel extends ChangeNotifier {
     double tilt = 60,
     double bearing = 0,
     bool startOrbitAfterRender = true,
+    bool clearExistingKml = true,
   }) async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
@@ -336,9 +343,11 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _lgRigService.stopOrbit();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      await _lgRigService.clearMaster();
+      if (clearExistingKml) {
+        await _lgRigService.stopOrbit();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await _lgRigService.clearMaster();
+      }
 
       final hasOrbit = orbitKml != null && orbitKml.trim().isNotEmpty;
       final masterKml = hasOrbit
