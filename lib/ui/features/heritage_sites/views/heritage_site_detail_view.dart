@@ -868,6 +868,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     final bool isLargeRig = screens > 3;
 
     final hasBoundary = geometry != null && !geometry.boundary.isEmpty;
+    final isCircularFallback = geometry?.boundary.isFallbackCircle ?? false;
     // For multi-component sites (more than one ring) focus the camera on the
     // largest polygon component rather than the full scattered extent.
     // Single-component sites use the existing full-bounds path unchanged.
@@ -887,17 +888,21 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     // close enough to see the taller 280 m extrusion. 3-screen rigs keep a
     // slightly more relaxed 1,800 m min with 120 m extrusion.
     final double flyToMin = isLargeRig ? 1200 : 1800;
-    final flyToRange = _clampRange(
-      orbitRange * 0.65,
-      min: flyToMin,
-      max: 12000,
-    );
+    final flyToRange = isCircularFallback
+        ? _clampRange(
+            orbitRange * 0.55,
+            min: isLargeRig ? 1100 : 1400,
+            max: 8000,
+          )
+        : _clampRange(orbitRange * 0.65, min: flyToMin, max: 12000);
 
     return _SiteCameraProfile(
       center: center,
       flyToRange: flyToRange,
       orbitRange: orbitRange,
-      tilt: _adaptiveTilt(orbitRange, isLargeRig: isLargeRig),
+      tilt: isCircularFallback
+          ? (isLargeRig ? 68 : 65)
+          : _adaptiveTilt(orbitRange, isLargeRig: isLargeRig),
     );
   }
 
@@ -982,6 +987,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             .toList(growable: false),
         category: site.category,
         isLargeRig: isLargeRig,
+        isCircularFallback: geometry.boundary.isFallbackCircle,
       );
     }
 

@@ -193,6 +193,7 @@ $content
     HeritageCategory? category,
     bool simplifyForLg = true,
     bool isLargeRig = false,
+    bool isCircularFallback = false,
   }) {
     // 3D extrusion height depends on both the render mode and rig size:
     //  • simplifyForLg + isLargeRig (>3 screens) → 280 m: tall enough to read
@@ -200,7 +201,9 @@ $content
     //  • simplifyForLg + 3 screens              → 120 m: shorter walls that
     //    suit the narrower single-screen viewport without GPU over-load.
     //  • full detail (!simplifyForLg)            → 300 m for any rig size.
-    final double extrusionHeight = simplifyForLg
+    final double extrusionHeight = isCircularFallback
+        ? (isLargeRig ? 420.0 : 320.0)
+        : simplifyForLg
         ? (isLargeRig ? 280.0 : 120.0)
         : 300.0;
     final safeName = _escapeXml(name);
@@ -285,10 +288,15 @@ $content
                 )
                 .join();
 
-      placemarks.add('''
-    <Placemark>
-      <name>${index == 0 ? safeName : '$safeName ${index + 1}'}</name>
-      <styleUrl>#site_boundary</styleUrl>
+      final geometryKml = isCircularFallback
+          ? '''
+      <LineString>
+        <extrude>1</extrude>
+        <tessellate>1</tessellate>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <coordinates>$outerBoundary</coordinates>
+      </LineString>'''
+          : '''
       <Polygon>
         <extrude>1</extrude>
         <tessellate>1</tessellate>
@@ -299,7 +307,13 @@ $content
           </LinearRing>
         </outerBoundaryIs>
         $innerBoundaries
-      </Polygon>
+      </Polygon>''';
+
+      placemarks.add('''
+    <Placemark>
+      <name>${index == 0 ? safeName : '$safeName ${index + 1}'}</name>
+      <styleUrl>#site_boundary</styleUrl>
+      $geometryKml
     </Placemark>''');
     }
 
@@ -338,7 +352,7 @@ $content
     <Style id="site_boundary">
       <LineStyle>
         <color>$lineColor</color>
-        <width>4</width>
+        <width>${isCircularFallback ? 10 : 4}</width>
       </LineStyle>
       <PolyStyle>
         <color>$polyColor</color>
