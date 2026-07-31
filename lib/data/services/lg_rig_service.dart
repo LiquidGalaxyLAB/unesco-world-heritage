@@ -8,9 +8,9 @@ import '../../core/utils/kml_builder.dart';
 import '../../domain/models/lg_connection_settings.dart';
 
 class LGRigService {
-  static const String _lgBaseUrl = 'http://lg1:81';
   static const String _webRoot = '/var/www/html';
   static const String _slaveKmlDirectory = '$_webRoot/kml';
+  static const String _masterKmlFileName = 'master.kml';
   static const String _logoUrl =
       'https://raw.githubusercontent.com/Saumya-28/lg_360_explorer/refs/heads/main/logos.png';
 
@@ -24,6 +24,11 @@ class LGRigService {
   SSHClient? _client;
   SftpClient? _sftp;
   LGConnectionSettings? _connectionSettings;
+
+  String get _lgBaseUrl {
+    final host = _connectionSettings?.host.trim();
+    return 'http://${host != null && host.isNotEmpty ? host : 'lg1'}:81';
+  }
 
   bool get isConnected => _client != null;
 
@@ -156,19 +161,27 @@ class LGRigService {
 
   Future<void> clearKml() async {
     final settings = _requireConnection();
-    String query =
-        'echo "exittour=true" > /tmp/query.txt && > $_webRoot/kmls.txt';
+    await _run('echo "exittour=true" > /tmp/query.txt');
+    await _writeRemoteKml(
+      _masterKmlFileName,
+      utf8.encode(KMLBuilder.generateBlankKml('master')),
+    );
 
     for (var screen = 2; screen <= settings.screens; screen++) {
       final blankKml = KMLBuilder.generateBlankKml('slave_$screen');
-      query += " && echo '$blankKml' > $_slaveKmlDirectory/slave_$screen.kml";
+      await _writeRemoteFile(
+        '$_slaveKmlDirectory/slave_$screen.kml',
+        utf8.encode(blankKml),
+      );
     }
-
-    await _client?.execute(query);
   }
 
   Future<void> clearMaster() async {
-    await _run('echo "exittour=true" > /tmp/query.txt && > $_webRoot/kmls.txt');
+    await _run('echo "exittour=true" > /tmp/query.txt');
+    await _writeRemoteKml(
+      _masterKmlFileName,
+      utf8.encode(KMLBuilder.generateBlankKml('master')),
+    );
   }
 
   Future<void> clearLogoOverlay() async {
@@ -197,22 +210,13 @@ class LGRigService {
     );
   }
 
-  Future<void> sendKml(String fileName, String content) async {
-    final safeFileName = _validateFileName(fileName);
-    await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
-    await _client!.run('echo "$_lgBaseUrl/$safeFileName" > $_webRoot/kmls.txt');
+  Future<void> sendKml(String _, String content) async {
+    await _writeRemoteKml(_masterKmlFileName, utf8.encode(content));
   }
 
   Future<void> uploadKml(String fileName, String content) async {
     final safeFileName = _validateFileName(fileName);
-    await _writeRemoteFile('$_webRoot/$safeFileName', utf8.encode(content));
-  }
-
-  Future<void> appendKml(String fileName) async {
-    final safeFileName = _validateFileName(fileName);
-    await _client!.run(
-      'echo "$_lgBaseUrl/$safeFileName" >> $_webRoot/kmls.txt',
-    );
+    await _writeRemoteKml(safeFileName, utf8.encode(content));
   }
 
   Future<void> sendKmlToSlave(int screen, String content) async {
@@ -229,10 +233,6 @@ class LGRigService {
       '$_slaveKmlDirectory/slave_$screen.kml',
       utf8.encode(content.trim()),
     );
-    // Ensure world-readable permissions after SFTP write.
-    // On real LG hardware /var/www/html/kml/ is often owned by www-data;
-    // the SFTP write succeeds but Google Earth on the slave cannot read
-    // the file without this chmod.
     await _client!.run('chmod 644 $_slaveKmlDirectory/slave_$screen.kml');
   }
 
@@ -386,6 +386,13 @@ class LGRigService {
     } finally {
       await file.close();
     }
+  }
+
+  Future<void> _writeRemoteKml(String fileName, List<int> bytes) async {
+    await _client!.run('mkdir -p $_slaveKmlDirectory');
+    final remotePath = '$_slaveKmlDirectory/$fileName';
+    await _writeRemoteFile(remotePath, bytes);
+    await _client!.run('chmod 644 $remotePath');
   }
 
   Future<void> _run(String command) async {
