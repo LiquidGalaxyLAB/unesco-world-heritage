@@ -186,7 +186,7 @@ $content
   ///  - dropping inner hole rings (barely visible at LG viewing distances)
   ///  - omitting the trajectory LineString
   ///  - capping rendered components at 30 (vs. 120 for the in-app map)
-  ///  - reducing extrusion height to 80 m (vs. 150 m) for lower GPU load
+  ///  - reducing extrusion height to 100 m (vs. 150 m) for lower GPU load
   static String buildBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,
@@ -194,8 +194,8 @@ $content
     bool simplifyForLg = true,
   }) {
     // 3D extrusion height: reduced for LG to minimise GPU vertex load on the
-    // Ubuntu cluster screens. 80 m is still clearly visible from orbit range.
-    final double extrusionHeight = simplifyForLg ? 80.0 : 150.0;
+    // Ubuntu cluster screens. 100 m is still clearly visible from orbit range.
+    final double extrusionHeight = simplifyForLg ? 120.0 : 150.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings
         .map(_normalizeRing)

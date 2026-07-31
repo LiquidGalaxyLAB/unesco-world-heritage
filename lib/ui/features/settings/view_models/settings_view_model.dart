@@ -181,7 +181,9 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _lgRigService.clearKml();
+      // The settings action clears only the master/site scene. The logo and
+      // site-information balloon live on slave screens and remain visible.
+      await _lgRigService.clearMaster();
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
       _state = _state.copyWith(
@@ -419,16 +421,29 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears the current site information from the rightmost LG screen.
+  Future<void> clearRightmostScreen() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    try {
+      await _lgRigService.clearBalloon();
+    } catch (error) {
+      _state = _state.copyWith(
+        errorMessage: 'Failed to clear the rightmost LG screen. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> renderKmlOnRightmostScreen({required String kml}) async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
     }
 
     try {
-      await _lgRigService.resetRefresh();
-      await _lgRigService.setRefresh();
-      await _lgRigService.clearBalloon();
-      await Future<void>.delayed(const Duration(milliseconds: 300));
       await _lgRigService.sendKmlToRightmostScreen(kml);
     } catch (error) {
       _state = _state.copyWith(
