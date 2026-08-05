@@ -888,10 +888,10 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         ? _calculateAdaptiveOrbitRange(bounds, center.latitude)
         : _fallbackOrbitRange(site.category);
 
-    // Large rigs (>3 screens) use a tighter min so the camera always lands
-    // close enough to see the taller 280 m extrusion. 3-screen rigs keep a
-    // slightly more relaxed 1,800 m min with 120 m extrusion.
-    final double flyToMin = isLargeRig ? 1200 : 1800;
+    // Keep the initial fly-to close enough that the extruded boundary reads as
+    // vertical walls instead of a flat footprint. Larger rigs already render
+    // taller walls, so both rig sizes can use a tighter low-end range.
+    final double flyToMin = isLargeRig ? 1100 : 1300;
     final flyToRange = isCircularFallback
         ? _clampRange(
             orbitRange * 0.55,
@@ -904,9 +904,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       center: center,
       flyToRange: flyToRange,
       orbitRange: orbitRange,
-      tilt: isCircularFallback
-          ? (isLargeRig ? 68 : 65)
-          : _adaptiveTilt(orbitRange, isLargeRig: isLargeRig),
+      tilt: 76,
     );
   }
 
@@ -946,27 +944,6 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       case HeritageCategory.unknown:
         return 5000;
     }
-  }
-
-  double _adaptiveTilt(double orbitRange, {bool isLargeRig = false}) {
-    // Tilt is based on orbit range (camera distance) and rig size.
-    // Large rigs (>3 screens) use a steeper close-in tilt (65°) so the taller
-    // 280 m extruded walls read clearly as a 3D shape across the panorama.
-    // 3-screen rigs cap at 60° which suits the narrower viewport.
-    if (orbitRange >= 150000) {
-      return 45;
-    }
-    if (orbitRange >= 80000) {
-      return 50;
-    }
-    if (orbitRange >= 25000) {
-      return 55;
-    }
-    if (orbitRange >= 8000) {
-      return 60;
-    }
-    // Only large rigs go to 65° — 3-screen rigs stay at 60°.
-    return isLargeRig ? 65 : 60;
   }
 
   double _clampRange(double value, {required double min, required double max}) {

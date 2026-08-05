@@ -278,36 +278,43 @@ $content
         altitude: extrusionHeight,
       );
 
-      // Inner holes: omitted when simplifyForLg is true.
-      final innerBoundaries = simplifyForLg
-          ? ''
-          : component.innerRings
-                .map(
-                  (ring) =>
-                      '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
-                )
-                .join();
-
-      final geometryKml = isCircularFallback
-          ? '''
+      // Render extruded boundary walls only. Using LineString instead of
+      // Polygon removes the filled top/roof face while keeping the vertical
+      // boundary curtain, matching the circular fallback KML behavior.
+      final wallGeometries = <String>[
+        '''
       <LineString>
         <extrude>1</extrude>
         <tessellate>1</tessellate>
         <altitudeMode>relativeToGround</altitudeMode>
         <coordinates>$outerBoundary</coordinates>
-      </LineString>'''
-          : '''
-      <Polygon>
+      </LineString>''',
+      ];
+
+      if (!simplifyForLg && !isCircularFallback) {
+        wallGeometries.addAll(
+          component.innerRings.map((ring) {
+            final innerBoundary = _buildLinearRing(
+              ring,
+              altitude: extrusionHeight,
+            );
+            return '''
+      <LineString>
         <extrude>1</extrude>
         <tessellate>1</tessellate>
         <altitudeMode>relativeToGround</altitudeMode>
-        <outerBoundaryIs>
-          <LinearRing>
-            <coordinates>$outerBoundary</coordinates>
-          </LinearRing>
-        </outerBoundaryIs>
-        $innerBoundaries
-      </Polygon>''';
+        <coordinates>$innerBoundary</coordinates>
+      </LineString>''';
+          }),
+        );
+      }
+
+      final geometryKml = wallGeometries.length == 1
+          ? wallGeometries.first
+          : '''
+      <MultiGeometry>
+        ${wallGeometries.join()}
+      </MultiGeometry>''';
 
       placemarks.add('''
     <Placemark>
