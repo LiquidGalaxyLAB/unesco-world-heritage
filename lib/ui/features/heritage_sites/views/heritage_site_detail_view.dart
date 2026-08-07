@@ -49,6 +49,10 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
   bool _isRenderingOnLg = false;
 
   static const int _orbitTourDurationSeconds = 24;
+  static const double _siteCameraTilt = 76;
+  static const double _largeSiteFocusRange = 2200;
+  static const double _largeSiteFocusThreshold = 12000;
+
   Timer? _orbitCompletionTimer;
   late final WebViewController _mapController;
   late final UnescoSiteGeometryRepository _geometryRepository;
@@ -807,15 +811,44 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
   }
 
-  /// Returns the bounding box of the single largest outer polygon ring in
-  /// [geometry], identified by the shoelace signed-area formula (same method
-  /// used by [_RingDescriptor] in the KML builder). For multi-component sites
-  /// this focuses the flyTo camera on the biggest cluster instead of the
-  /// full scattered extent of every tiny satellite polygon.
-  _GeometryBounds _findLargestComponentBounds(
+  _LatLngCenter? _firstRingPoint(List<HeritageGeoPoint>? ring) {
+    if (ring == null || ring.isEmpty) {
+      return null;
+    }
+    final point = ring.first;
+    return _LatLngCenter(point.latitude, point.longitude);
+  }
+
+  _GeometryBounds _calculateRingBounds(List<HeritageGeoPoint> ring) {
+    if (ring.isEmpty) return const _GeometryBounds.empty();
+
+    var minLat = double.infinity;
+    var maxLat = double.negativeInfinity;
+    var minLng = double.infinity;
+    var maxLng = double.negativeInfinity;
+    for (final point in ring) {
+      minLat = math.min(minLat, point.latitude);
+      maxLat = math.max(maxLat, point.latitude);
+      minLng = math.min(minLng, point.longitude);
+      maxLng = math.max(maxLng, point.longitude);
+    }
+
+    if (!minLat.isFinite || !minLng.isFinite) {
+      return const _GeometryBounds.empty();
+    }
+
+    return _GeometryBounds(
+      minLatitude: minLat,
+      maxLatitude: maxLat,
+      minLongitude: minLng,
+      maxLongitude: maxLng,
+    );
+  }
+
+  List<HeritageGeoPoint>? _findLargestComponentRing(
     HeritagePolygonGeometry geometry,
   ) {
-    if (geometry.rings.isEmpty) return const _GeometryBounds.empty();
+    if (geometry.rings.isEmpty) return null;
 
     List<HeritageGeoPoint>? largestRing;
     double largestArea = 0;
@@ -836,31 +869,23 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       }
     }
 
+    return largestRing;
+  }
+
+  /// Returns the bounding box of the single largest outer polygon ring in
+  /// [geometry], identified by the shoelace signed-area formula (same method
+  /// used by [_RingDescriptor] in the KML builder). For multi-component sites
+  /// this focuses the flyTo camera on the biggest cluster instead of the
+  /// full scattered extent of every tiny satellite polygon.
+  _GeometryBounds _findLargestComponentBounds(
+    HeritagePolygonGeometry geometry,
+  ) {
+    final largestRing = _findLargestComponentRing(geometry);
     if (largestRing == null || largestRing.length < 4) {
       return const _GeometryBounds.empty();
     }
 
-    var minLat = double.infinity;
-    var maxLat = double.negativeInfinity;
-    var minLng = double.infinity;
-    var maxLng = double.negativeInfinity;
-    for (final point in largestRing) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLng) minLng = point.longitude;
-      if (point.longitude > maxLng) maxLng = point.longitude;
-    }
-
-    if (!minLat.isFinite || !minLng.isFinite) {
-      return const _GeometryBounds.empty();
-    }
-
-    return _GeometryBounds(
-      minLatitude: minLat,
-      maxLatitude: maxLat,
-      minLongitude: minLng,
-      maxLongitude: maxLng,
-    );
+    return _calculateRingBounds(largestRing);
   }
 
   _SiteCameraProfile _buildCameraProfile({
@@ -871,40 +896,52 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     final int screens = widget.settingsViewModel.state.settings?.screens ?? 3;
     final bool isLargeRig = screens > 3;
 
-    final hasBoundary = geometry != null && !geometry.boundary.isEmpty;
-    final isCircularFallback = geometry?.boundary.isFallbackCircle ?? false;
+    final boundary = geometry?.boundary;
+    final hasBoundary = boundary != null && !boundary.isEmpty;
+    final isCircularFallback = boundary?.isFallbackCircle ?? false;
     // For multi-component sites (more than one ring) focus the camera on the
     // largest polygon component rather than the full scattered extent.
     // Single-component sites use the existing full-bounds path unchanged.
+    final focusRing = hasBoundary
+        ? (boundary.rings.length > 1
+              ? _findLargestComponentRing(boundary)
+              : boundary.rings.first)
+        : null;
     final bounds = hasBoundary
-        ? (geometry!.boundary.rings.length > 1
-              ? _findLargestComponentBounds(geometry.boundary)
-              : _calculateGeometryBounds(geometry.boundary))
+        ? (boundary.rings.length > 1
+              ? _findLargestComponentBounds(boundary)
+              : _calculateGeometryBounds(boundary))
         : const _GeometryBounds.empty();
-    final center = bounds.isValid
+    final boundsCenter = bounds.isValid
         ? _calculateGeometryCenter(bounds)
         : _LatLngCenter(site.latitude, site.longitude);
     final orbitRange = bounds.isValid
-        ? _calculateAdaptiveOrbitRange(bounds, center.latitude)
+        ? _calculateAdaptiveOrbitRange(bounds, boundsCenter.latitude)
         : _fallbackOrbitRange(site.category);
+
+    final useBoundaryPointFocus =
+        hasBoundary &&
+        (isCircularFallback || orbitRange > _largeSiteFocusThreshold);
+    final center = useBoundaryPointFocus
+        ? (_firstRingPoint(focusRing) ?? boundsCenter)
+        : boundsCenter;
+    final effectiveOrbitRange = useBoundaryPointFocus
+        ? _largeSiteFocusRange
+        : orbitRange;
 
     // Keep the initial fly-to close enough that the extruded boundary reads as
     // vertical walls instead of a flat footprint. Larger rigs already render
     // taller walls, so both rig sizes can use a tighter low-end range.
     final double flyToMin = isLargeRig ? 1100 : 1300;
-    final flyToRange = isCircularFallback
-        ? _clampRange(
-            orbitRange * 0.55,
-            min: isLargeRig ? 1100 : 1400,
-            max: 8000,
-          )
-        : _clampRange(orbitRange * 0.65, min: flyToMin, max: 12000);
+    final flyToRange = useBoundaryPointFocus
+        ? _largeSiteFocusRange
+        : _clampRange(effectiveOrbitRange * 0.65, min: flyToMin, max: 12000);
 
     return _SiteCameraProfile(
       center: center,
       flyToRange: flyToRange,
-      orbitRange: orbitRange,
-      tilt: 76,
+      orbitRange: effectiveOrbitRange,
+      tilt: _siteCameraTilt,
     );
   }
 
