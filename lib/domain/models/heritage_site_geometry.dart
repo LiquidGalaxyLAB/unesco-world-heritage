@@ -1,8 +1,5 @@
 class HeritageGeoPoint {
-  const HeritageGeoPoint({
-    required this.latitude,
-    required this.longitude,
-  });
+  const HeritageGeoPoint({required this.latitude, required this.longitude});
 
   final double latitude;
   final double longitude;
@@ -11,9 +8,11 @@ class HeritageGeoPoint {
 class HeritagePolygonGeometry {
   const HeritagePolygonGeometry({
     required this.rings,
+    this.isFallbackCircle = false,
   });
 
   final List<List<HeritageGeoPoint>> rings;
+  final bool isFallbackCircle;
 
   bool get isEmpty => rings.isEmpty;
 }

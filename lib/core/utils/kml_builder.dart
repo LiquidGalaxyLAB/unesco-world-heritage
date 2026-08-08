@@ -6,8 +6,18 @@ import '../../domain/models/heritage_site.dart';
 class KMLBuilder {
   static const int _denseComponentThreshold = 200;
   static const int _denseComponentRenderLimit = 120;
+
+  /// Reduced component cap for LG — keeps SSH-transferred KML lean.
+  /// 30 polygons is a good balance: complex sites stay readable, simple ones
+  /// render completely, and GPU overhead on the LG cluster stays manageable.
+  static const int _lgComponentRenderLimit = 30;
   static const int _denseCirclePointCount = 72;
   static const int _trajectoryComponentThreshold = 4;
+
+  /// Maximum points per outer ring in LG-simplified mode. Rings with more
+  /// points than this are decimated using uniform stride sampling to keep
+  /// coordinate strings short without distorting the site boundary shape.
+  static const int _lgMaxRingPoints = 80;
 
   final StringBuffer _buffer = StringBuffer();
   bool _hasHeader = false;
@@ -92,6 +102,42 @@ class KMLBuilder {
 </kml>
   ''';
 
+  static String combineKmlDocuments({
+    required String name,
+    required List<String> documents,
+  }) {
+    final content = documents
+        .map(_extractDocumentContent)
+        .where((value) => value.trim().isNotEmpty)
+        .join('\n');
+    final safeName = _escapeXml(name);
+
+    return '''<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>$safeName</name>
+$content
+  </Document>
+</kml>''';
+  }
+
+  static String _extractDocumentContent(String kml) {
+    final documentStart = RegExp(
+      r'<Document\b[^>]*>',
+      caseSensitive: false,
+    ).firstMatch(kml);
+    if (documentStart == null) {
+      return kml.trim();
+    }
+
+    final documentEnd = kml.toLowerCase().lastIndexOf('</document>');
+    if (documentEnd <= documentStart.end) {
+      return kml.substring(documentStart.end).trim();
+    }
+
+    return kml.substring(documentStart.end, documentEnd).trim();
+  }
+
   static String screenOverlayImage({
     required String id,
     required String name,
@@ -130,12 +176,36 @@ class KMLBuilder {
     return getKmlSkeleton(content, safeName);
   }
 
+  /// Builds a 3-D extruded KML boundary for Liquid Galaxy.
+  ///
+  /// This is simplified for the LG rig by default. Set [simplifyForLg] to
+  /// `false` only when a full-detail 3-D boundary is explicitly required.
+  /// The lightweight output:
+  ///  - rounding coordinates to 3 decimal places (~110 m accuracy)
+  ///  - decimating dense rings to ≤ 80 points per polygon
+  ///  - dropping inner hole rings (barely visible at LG viewing distances)
+  ///  - omitting the trajectory LineString
+  ///  - capping rendered components at 30 (vs. 120 for the in-app map)
+  ///  - reducing extrusion height to 100 m (vs. 150 m) for lower GPU load
   static String buildBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,
     HeritageCategory? category,
+    bool simplifyForLg = true,
+    bool isLargeRig = false,
+    bool isCircularFallback = false,
   }) {
-    const double extrusionHeight = 150;
+    // 3D extrusion height depends on both the render mode and rig size:
+    //  • simplifyForLg + isLargeRig (>3 screens) → 280 m: tall enough to read
+    //    as a solid 3D shape across a wide panoramic display.
+    //  • simplifyForLg + 3 screens              → 120 m: shorter walls that
+    //    suit the narrower single-screen viewport without GPU over-load.
+    //  • full detail (!simplifyForLg)            → 300 m for any rig size.
+    final double extrusionHeight = isCircularFallback
+        ? (isLargeRig ? 420.0 : 320.0)
+        : simplifyForLg
+        ? (isLargeRig ? 280.0 : 120.0)
+        : 300.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings
         .map(_normalizeRing)
@@ -177,63 +247,94 @@ class KMLBuilder {
     }
 
     final isDenseSite = components.length > _denseComponentThreshold;
-    final renderedComponents = isDenseSite
+    final renderedComponents = simplifyForLg
+        ? _sampleComponentsForDenseSite(
+            components,
+            limit: _lgComponentRenderLimit,
+          )
+        : isDenseSite
         ? _sampleComponentsForDenseSite(
             components,
             limit: _denseComponentRenderLimit,
           )
         : components;
+
     final placemarks = <String>[];
     for (var index = 0; index < renderedComponents.length; index++) {
       final component = renderedComponents[index];
+
+      // When simplifying for LG: round coordinates, thin dense rings, and
+      // drop inner holes (barely visible at LG orbit distances).
+      final outerRing = simplifyForLg
+          ? _normalizeSimplifiedRing(
+              _decimateRing(_simplifyRing(component.outerRing)),
+            )
+          : component.outerRing;
+      if (outerRing.length < 4) {
+        continue;
+      }
       final outerBoundary = _buildLinearRing(
-        component.outerRing,
+        outerRing,
         altitude: extrusionHeight,
       );
-      final innerBoundaries = component.innerRings
-          .map(
-            (ring) =>
-                '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
-          )
-          .join();
+
+      // Render extruded boundary walls only. Using LineString instead of
+      // Polygon removes the filled top/roof face while keeping the vertical
+      // boundary curtain, matching the circular fallback KML behavior.
+      final wallGeometries = <String>[
+        '''
+      <LineString>
+        <extrude>1</extrude>
+        <tessellate>1</tessellate>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <coordinates>$outerBoundary</coordinates>
+      </LineString>''',
+      ];
+
+      if (!simplifyForLg && !isCircularFallback) {
+        wallGeometries.addAll(
+          component.innerRings.map((ring) {
+            final innerBoundary = _buildLinearRing(
+              ring,
+              altitude: extrusionHeight,
+            );
+            return '''
+      <LineString>
+        <extrude>1</extrude>
+        <tessellate>1</tessellate>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <coordinates>$innerBoundary</coordinates>
+      </LineString>''';
+          }),
+        );
+      }
+
+      final geometryKml = wallGeometries.length == 1
+          ? wallGeometries.first
+          : '''
+      <MultiGeometry>
+        ${wallGeometries.join()}
+      </MultiGeometry>''';
 
       placemarks.add('''
     <Placemark>
       <name>${index == 0 ? safeName : '$safeName ${index + 1}'}</name>
       <styleUrl>#site_boundary</styleUrl>
-      <Polygon>
-        <extrude>1</extrude>
-        <tessellate>1</tessellate>
-        <altitudeMode>relativeToGround</altitudeMode>
-        <outerBoundaryIs>
-          <LinearRing>
-            <coordinates>$outerBoundary</coordinates>
-          </LinearRing>
-        </outerBoundaryIs>
-        $innerBoundaries
-      </Polygon>
+      $geometryKml
     </Placemark>''');
     }
 
-    final trajectory = _buildTrajectoryPlacemark(
-      name: safeName,
-      components: components,
-    );
-    final denseSiteCircle = isDenseSite
+    // Trajectory and dense-site overview are omitted from the lightweight LG
+    // KML, where they add vertices but no useful boundary detail.
+    final trajectory = simplifyForLg
+        ? ''
+        : _buildTrajectoryPlacemark(name: safeName, components: components);
+    final denseSiteCircle = !simplifyForLg && isDenseSite
         ? _buildDenseSiteCirclePlacemark(name: safeName, components: components)
         : '';
-
-    final content =
-        '''
-    <Style id="site_boundary">
-      <LineStyle>
-        <color>$lineColor</color>
-        <width>4</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>$polyColor</color>
-      </PolyStyle>
-    </Style>
+    final optionalStyles = simplifyForLg
+        ? ''
+        : '''
     <Style id="site_trajectory">
       <LineStyle>
         <color>$lineColor</color>
@@ -251,12 +352,92 @@ class KMLBuilder {
       <PolyStyle>
         <color>1a66f2ff</color>
       </PolyStyle>
+    </Style>''';
+
+    final content =
+        '''
+    <Style id="site_boundary">
+      <LineStyle>
+        <color>$lineColor</color>
+        <width>${isCircularFallback ? 10 : 4}</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>$polyColor</color>
+      </PolyStyle>
     </Style>
+    $optionalStyles
     $denseSiteCircle
     ${placemarks.join()}
     $trajectory''';
 
     return getKmlSkeleton(content, safeName);
+  }
+
+  /// Rounds each coordinate in [ring] to 3 decimal places for LG mode.
+  /// 3 d.p. ≈ 110 m accuracy — imperceptible at LG orbit distances,
+  /// but produces ~25 % shorter coordinate strings vs. 4 d.p.
+  static List<List<double>> _simplifyRing(List<List<double>> ring) {
+    return ring
+        .map((p) => <double>[_r3(p[0]), _r3(p[1])])
+        .toList(growable: false);
+  }
+
+  /// Rounds [value] to 3 decimal places.
+  static double _r3(double value) => (value * 1000).roundToDouble() / 1000;
+
+  /// Decimates a ring to at most [_lgMaxRingPoints] points using uniform stride
+  /// sampling. Preserves the first and last (closing) points so the ring
+  /// remains a valid closed polygon. Only applied in LG-simplified mode.
+  static List<List<double>> _decimateRing(List<List<double>> ring) {
+    if (ring.length <= _lgMaxRingPoints) return ring;
+
+    final result = <List<double>>[];
+    // Always keep first point.
+    result.add(ring.first);
+
+    // Sample interior points uniformly.
+    final interior = ring.sublist(1, ring.length - 1);
+    final step = math.max(1, (interior.length / (_lgMaxRingPoints - 2)).ceil());
+    for (var i = 0; i < interior.length; i += step) {
+      result.add(interior[i]);
+      if (result.length >= _lgMaxRingPoints - 1) break;
+    }
+
+    // Always keep closing point.
+    result.add(ring.last);
+    return result;
+  }
+
+  /// Restores a valid closed ring after coordinate rounding. Adjacent points
+  /// can become identical at 3 decimal places, so they must be removed before
+  /// writing the simplified 3-D polygon.
+  static List<List<double>> _normalizeSimplifiedRing(List<List<double>> ring) {
+    final normalizedRing = <List<double>>[];
+    for (final point in ring) {
+      if (normalizedRing.isEmpty ||
+          normalizedRing.last[0] != point[0] ||
+          normalizedRing.last[1] != point[1]) {
+        normalizedRing.add(<double>[point[0], point[1]]);
+      }
+    }
+
+    if (normalizedRing.length < 2) {
+      return const <List<double>>[];
+    }
+
+    final first = normalizedRing.first;
+    final last = normalizedRing.last;
+    if (first[0] != last[0] || first[1] != last[1]) {
+      normalizedRing.add(<double>[first[0], first[1]]);
+    }
+
+    final distinctVertices = <String>{
+      for (final point in normalizedRing.take(normalizedRing.length - 1))
+        '${point[0]},${point[1]}',
+    };
+    return distinctVertices.length >= 3
+        ? normalizedRing
+        : const <List<double>>[];
   }
 
   /// Builds a 2D flat KML polygon (clampToGround) suitable for the phone app
@@ -456,30 +637,15 @@ class KMLBuilder {
     required double longitude,
     double range = 5000,
     double tilt = 60,
-    double orbitDuration = 5.0,
+    double orbitDuration = 20.0,
   }) {
-    StringBuffer playlist = StringBuffer();
+    final StringBuffer playlist = StringBuffer();
 
-    playlist.write('''
-      <gx:FlyTo>
-        <gx:duration>1.0</gx:duration>
-        <gx:flyToMode>smooth</gx:flyToMode>
-        <LookAt>
-          <longitude>$longitude</longitude>
-          <latitude>$latitude</latitude>
-          <range>$range</range>
-          <tilt>$tilt</tilt>
-          <heading>0</heading>
-          <altitudeMode>relativeToGround</altitudeMode>
-        </LookAt>
-      </gx:FlyTo>
-    ''');
+    const int steps = 24;
+    final double stepDuration = (orbitDuration / (steps + 1)).clamp(0.5, 3.0);
 
-    const int steps = 18;
-    double stepDuration = orbitDuration / steps;
-
-    for (int i = 1; i <= steps; i++) {
-      double heading = (i * 20.0) % 360;
+    for (int i = 0; i <= steps; i++) {
+      final double heading = (i * 15.0) % 360;
       playlist.write('''
       <gx:FlyTo>
         <gx:duration>$stepDuration</gx:duration>
@@ -496,18 +662,12 @@ class KMLBuilder {
       ''');
     }
 
-    playlist.write('''
-      <gx:Wait>
-        <gx:duration>2.0</gx:duration>
-      </gx:Wait>
-    ''');
-
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
   <Document>
     <name>$tourName</name>
     <gx:Tour>
-      <name>$tourName</name>
+      <name>Orbit</name>
       <gx:Playlist>
         $playlist
       </gx:Playlist>
@@ -619,7 +779,6 @@ class KMLBuilder {
     final safeTitle = _escapeHtml(title);
     final safeTitleXml = _escapeXml(title);
 
-    // Truncate description to keep the balloon readable when a climate strip is shown.
     final hasClimate =
         temperature != null || windSpeed != null || bestTimeToVisit != null;
     final descText = hasClimate && description.length > 300
@@ -632,37 +791,35 @@ class KMLBuilder {
         ? '''
         <div style="padding:0 18px;">
           <img src="${_escapeHtml(normalizedImageUrl)}" alt="$safeTitle"
-               style="width:100%;height:340px;display:block;object-fit:cover;border-radius:0;"/>
+               style="width:100%;height:260px;display:block;object-fit:cover;border-radius:0;"/>
         </div>
         '''
         : '';
 
-    // 3 climate items in a single row side by side.
-    final tempCell = temperature != null
-        ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;border-right:1px solid #3a3636;">'
-              '<div style="font-size:24px;margin-bottom:6px;">&#127777;</div>'
-              '<div style="font-size:20px;font-weight:700;color:#ffffff;">$temperature</div>'
-              '<div style="font-size:14px;color:#aaaaaa;margin-top:4px;">Temperature</div>'
-              '</div>'
-        : '';
-    final windCell = windSpeed != null
-        ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;border-right:1px solid #3a3636;">'
-              '<div style="font-size:24px;margin-bottom:6px;">&#127788;</div>'
-              '<div style="font-size:20px;font-weight:700;color:#ffffff;">$windSpeed</div>'
-              '<div style="font-size:14px;color:#aaaaaa;margin-top:4px;">Wind Speed</div>'
-              '</div>'
-        : '';
-    final bestCell = bestTimeToVisit != null
-        ? '<div style="flex:1;background:#252323;padding:14px 10px;text-align:center;">'
-              '<div style="font-size:24px;margin-bottom:6px;">&#127758;</div>'
-              '<div style="font-size:20px;font-weight:700;color:#ffffff;">$bestTimeToVisit</div>'
-              '<div style="font-size:14px;color:#aaaaaa;margin-top:4px;">Best Time</div>'
-              '</div>'
-        : '';
+    final safeTemperature = _escapeHtml(temperature ?? '--');
+    final safeWindSpeed = _escapeHtml(windSpeed ?? '--');
+    final safeBestTimeToVisit = _escapeHtml(bestTimeToVisit ?? '--');
+    final balloonLatitude = latitude + 0.035;
     final climateStrip = hasClimate
-        ? '<div style="display:flex;margin:18px 18px 0 18px;border-radius:14px;overflow:hidden;border:1px solid #3a3636;">'
-              '$tempCell$windCell$bestCell'
-              '</div>'
+        ? '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:18px 0 0 0;border-collapse:collapse;border:1px solid #3a3636;background:#252323;">'
+              '<tr>'
+              '<td width="33%" valign="top" align="center" style="width:33%;padding:12px 6px;text-align:center;border-right:1px solid #3a3636;white-space:nowrap;">'
+              '<span style="font-size:29px;">&#127777;</span><br/>'
+              '<span style="font-size:23px;font-weight:700;color:#ffffff;">$safeTemperature</span><br/>'
+              '<span style="font-size:16px;color:#aaaaaa;">Temperature</span>'
+              '</td>'
+              '<td width="34%" valign="top" align="center" style="width:34%;padding:12px 6px;text-align:center;border-right:1px solid #3a3636;white-space:nowrap;">'
+              '<span style="font-size:29px;">&#127788;</span><br/>'
+              '<span style="font-size:23px;font-weight:700;color:#ffffff;">$safeWindSpeed</span><br/>'
+              '<span style="font-size:16px;color:#aaaaaa;">Wind Speed</span>'
+              '</td>'
+              '<td width="33%" valign="top" align="center" style="width:33%;padding:12px 6px;text-align:center;white-space:nowrap;">'
+              '<span style="font-size:29px;">&#127758;</span><br/>'
+              '<span style="font-size:23px;font-weight:700;color:#ffffff;">$safeBestTimeToVisit</span><br/>'
+              '<span style="font-size:16px;color:#aaaaaa;">Best Time</span>'
+              '</td>'
+              '</tr>'
+              '</table>'
         : '';
 
     return '''
@@ -675,20 +832,17 @@ class KMLBuilder {
         <bgColor>ff1b1b1b</bgColor>
         <textColor>ffffffff</textColor>
         <text><![CDATA[
-          <div style="width:700px;background:#1f1d1d;border-radius:24px;overflow:hidden;
+          <div style="width:760px;background:#1f1d1d;border-radius:18px;overflow:hidden;
                       font-family:Arial,sans-serif;color:#ffffff;border:1px solid #3a3636;
                       box-shadow:0 16px 36px rgba(0,0,0,0.42);">
-            <div style="display:flex;align-items:center;gap:14px;padding:22px 22px 18px 22px;"><!--
-              <h2 style="margin: 0; font-size: 25px; font-weight: 700;">&#128205; $title</h2>
-            --></div>
             <div style="display:flex;align-items:center;gap:14px;padding:0 22px 18px 22px;">
-              <div style="font-size:26px;line-height:1;color:#ffffff;">&#128205;</div>
-              <div style="font-size:29px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
+              <div style="font-size:34px;line-height:1;color:#ffffff;">&#128205;</div>
+              <div style="font-size:34px;font-weight:700;line-height:1.3;color:#ffffff;">$safeTitle</div>
             </div>
             $imageSection
             $climateStrip
-            <div style="padding:22px 22px 26px 22px;">
-              <p style="margin:0;font-size:22px;line-height:1.6;color:#f0f0f0;">$safeDescription</p>
+            <div style="padding:22px 22px 24px 22px;">
+              <p style="margin:0;font-size:26px;line-height:1.45;color:#f0f0f0;">$safeDescription</p>
             </div>
           </div>
         ]]></text>
@@ -699,15 +853,16 @@ class KMLBuilder {
       <description></description>
      <LookAt>
        <longitude>$longitude</longitude>
-       <latitude>$latitude</latitude>
+       <latitude>$balloonLatitude</latitude>
        <heading>0</heading>
-       <tilt>0</tilt>
-       <range>12</range>
+       <tilt>45</tilt>
+       <range>5000</range>
+       <altitudeMode>relativeToGround</altitudeMode>
      </LookAt>
       <styleUrl>#site_info_balloon</styleUrl>
      <gx:balloonVisibility>1</gx:balloonVisibility>
      <Point>
-       <coordinates>$longitude,$latitude,0</coordinates>
+       <coordinates>$longitude,$balloonLatitude,0</coordinates>
      </Point>
    </Placemark>
   </Document>

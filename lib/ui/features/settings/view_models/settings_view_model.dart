@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/utils/kml_builder.dart';
 import '../../../../data/services/lg_rig_service.dart';
 import '../../../../domain/models/lg_connection_settings.dart';
 import '../../../../domain/repositories/lg_settings_repository.dart';
@@ -180,7 +181,7 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _lgRigService.clearKml();
+      await clearSiteKml();
       _state = _state.copyWith(isLoading: false);
     } catch (error) {
       _state = _state.copyWith(
@@ -189,6 +190,14 @@ class SettingsViewModel extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  /// Clears only the master/site KML, preserving slave-screen overlays.
+  Future<void> clearSiteKml() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+    await _lgRigService.clearMaster();
   }
 
   Future<void> sendClearLogoCommand() async {
@@ -324,6 +333,7 @@ class SettingsViewModel extends ChangeNotifier {
     double tilt = 60,
     double bearing = 0,
     bool startOrbitAfterRender = true,
+    bool clearExistingKml = true,
   }) async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
@@ -333,14 +343,20 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _lgRigService.stopOrbit();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      await _lgRigService.clearMaster();
+      if (clearExistingKml) {
+        await _lgRigService.stopOrbit();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await _lgRigService.clearMaster();
+      }
 
-      // Build the list of concurrent operations:
-      //  • flyTo   — writes to /tmp/query.txt (starts camera animation)
-      //  • sendKml — SFTP-writes boundary.kml + overwrites kmls.txt
-      //  • uploadKml — SFTP-writes orbit.kml (no kmls.txt touch yet)
+      final hasOrbit = orbitKml != null && orbitKml.trim().isNotEmpty;
+      final masterKml = hasOrbit
+          ? KMLBuilder.combineKmlDocuments(
+              name: fileName,
+              documents: <String>[kml, orbitKml],
+            )
+          : kml;
+
       final concurrentOps = <Future<void>>[
         _lgRigService.flyTo(
           latitude: latitude,
@@ -350,29 +366,14 @@ class SettingsViewModel extends ChangeNotifier {
           tilt: tilt,
           bearing: bearing,
         ),
-        _lgRigService.sendKml(fileName, kml),
+        _lgRigService.sendKml('master.kml', masterKml),
       ];
-
-      final hasOrbit =
-          orbitFileName != null &&
-          orbitFileName.trim().isNotEmpty &&
-          orbitKml != null &&
-          orbitKml.trim().isNotEmpty;
-
-      if (hasOrbit) {
-        concurrentOps.add(_lgRigService.uploadKml(orbitFileName, orbitKml));
-      }
 
       await Future.wait(concurrentOps);
 
-      // appendKml must run after sendKml completes (both touch kmls.txt).
-      if (hasOrbit) {
-        await _lgRigService.appendKml(orbitFileName);
-        if (startOrbitAfterRender) {
-          // Short pause so Google Earth can parse the freshly-appended tour.
-          await Future<void>.delayed(const Duration(seconds: 2));
-          await _lgRigService.startOrbit();
-        }
+      if (hasOrbit && startOrbitAfterRender) {
+        await Future<void>.delayed(const Duration(milliseconds: 2500));
+        await _lgRigService.startOrbit();
       }
 
       _state = _state.copyWith(isLoading: false);
@@ -429,16 +430,29 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears the current site information from the rightmost LG screen.
+  Future<void> clearRightmostScreen() async {
+    if (!state.isConnected) {
+      throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
+    }
+
+    try {
+      await _lgRigService.clearBalloon();
+    } catch (error) {
+      _state = _state.copyWith(
+        errorMessage: 'Failed to clear the rightmost LG screen. $error',
+      );
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> renderKmlOnRightmostScreen({required String kml}) async {
     if (!state.isConnected) {
       throw const LGLocalConnectionError('Not connected to Liquid Galaxy');
     }
 
     try {
-      await _lgRigService.resetRefresh();
-      await _lgRigService.setRefresh();
-      await _lgRigService.clearBalloon();
-      await Future<void>.delayed(const Duration(milliseconds: 300));
       await _lgRigService.sendKmlToRightmostScreen(kml);
     } catch (error) {
       _state = _state.copyWith(

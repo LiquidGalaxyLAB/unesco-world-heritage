@@ -249,7 +249,10 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
 
     return HeritageSiteGeometry(
       propertyId: propertyId,
-      boundary: HeritagePolygonGeometry(rings: validRings),
+      boundary: HeritagePolygonGeometry(
+        rings: validRings,
+        isFallbackCircle: true,
+      ),
     );
   }
 
