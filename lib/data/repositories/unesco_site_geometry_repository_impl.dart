@@ -214,32 +214,14 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
     UnescoSiteDto site,
     int propertyId,
   ) async {
-    final sitesService = _sitesService;
-    if (sitesService == null) {
-      return null;
-    }
-
-    final coordinates = await _fetchComponentCoordinatesOrEmpty(
-      propertyId,
-      sitesService,
-    );
-    final componentPoints = coordinates
-        .map(
-          (point) => HeritageGeoPoint(latitude: point[0], longitude: point[1]),
-        )
-        .toList(growable: false);
-    final rings = componentPoints.isNotEmpty
-        ? <List<HeritageGeoPoint>>[
-            _buildFallbackRing(componentPoints, site.rawCategory),
-          ]
-        : <List<HeritageGeoPoint>>[
-            _buildFallbackRing(<HeritageGeoPoint>[
-              HeritageGeoPoint(
-                latitude: site.latitude,
-                longitude: site.longitude,
-              ),
-            ], site.rawCategory),
-          ];
+    // A property's components can be many kilometres apart. For a missing
+    // ArcGIS boundary, use UNESCO's official site coordinate only so the
+    // fallback circle remains local and the camera can frame it closely.
+    final rings = <List<HeritageGeoPoint>>[
+      _buildFallbackRing(<HeritageGeoPoint>[
+        HeritageGeoPoint(latitude: site.latitude, longitude: site.longitude),
+      ], site.rawCategory),
+    ];
     final validRings = rings
         .where((ring) => ring.isNotEmpty)
         .toList(growable: false);
@@ -254,17 +236,6 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
         isFallbackCircle: true,
       ),
     );
-  }
-
-  Future<List<List<double>>> _fetchComponentCoordinatesOrEmpty(
-    int propertyId,
-    UnescoSitesService sitesService,
-  ) async {
-    try {
-      return await sitesService.fetchSiteComponentCoordinates(propertyId);
-    } on UnescoSitesException {
-      return const <List<double>>[];
-    }
   }
 
   Future<List<WdpaSiteCandidateDto>> _fetchWdpaCandidates() async {
@@ -457,13 +428,13 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
     final normalizedCategory = rawCategory.trim().toLowerCase();
     switch (normalizedCategory) {
       case 'natural':
-        return 1600;
-      case 'mixed':
-        return 1400;
-      case 'cultural':
-        return 900;
-      default:
         return 450;
+      case 'mixed':
+        return 405;
+      case 'cultural':
+        return 270;
+      default:
+        return 135;
     }
   }
 }
