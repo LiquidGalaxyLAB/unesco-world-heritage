@@ -259,7 +259,7 @@ class SettingsViewModel extends ChangeNotifier {
     required double longitude,
     required double range,
     double altitude = 150,
-    double tilt = 60,
+    double tilt = 30,
     double bearing = 0,
   }) async {
     if (!state.isConnected) {
@@ -330,7 +330,7 @@ class SettingsViewModel extends ChangeNotifier {
     String? orbitFileName,
     String? orbitKml,
     double altitude = 150,
-    double tilt = 60,
+    double tilt = 30,
     double bearing = 0,
     bool startOrbitAfterRender = true,
     bool clearExistingKml = true,
@@ -395,7 +395,7 @@ class SettingsViewModel extends ChangeNotifier {
     required double longitude,
     required double range,
     double altitude = 150,
-    double tilt = 60,
+    double tilt = 30,
     double bearing = 0,
     bool startOrbitAfterRender = true,
   }) async {

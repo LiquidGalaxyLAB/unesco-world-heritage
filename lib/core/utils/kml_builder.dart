@@ -196,16 +196,16 @@ $content
     bool isCircularFallback = false,
   }) {
     // 3D extrusion height depends on both the render mode and rig size:
-    //  • simplifyForLg + isLargeRig (>3 screens) → 280 m: tall enough to read
+    //  • simplifyForLg + isLargeRig (>3 screens) → 450 m: tall enough to read
     //    as a solid 3D shape across a wide panoramic display.
-    //  • simplifyForLg + 3 screens              → 120 m: shorter walls that
-    //    suit the narrower single-screen viewport without GPU over-load.
-    //  • full detail (!simplifyForLg)            → 300 m for any rig size.
+    //  • simplifyForLg + 3 screens              → 350 m: taller walls so they
+    //    read as 3D from a 30° tilt ground-level camera.
+    //  • full detail (!simplifyForLg)            → 500 m for any rig size.
     final double extrusionHeight = isCircularFallback
-        ? (isLargeRig ? 420.0 : 320.0)
+        ? (isLargeRig ? 450.0 : 380.0)
         : simplifyForLg
-        ? (isLargeRig ? 280.0 : 120.0)
-        : 300.0;
+        ? (isLargeRig ? 450.0 : 350.0)
+        : 500.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings
         .map(_normalizeRing)
@@ -557,7 +557,7 @@ $content
                   <longitude>$lon</longitude>
                   <latitude>$lat</latitude>
                   <heading>${i.toDouble()}</heading>
-                  <tilt>60</tilt>
+                  <tilt>30</tilt>
                   <range>40000</range>
                   <gx:fovy>60</gx:fovy>
                   <altitude>3341.7995674</altitude>
@@ -591,7 +591,7 @@ $content
                   <longitude>$lon</longitude>
                   <latitude>$lat</latitude>
                   <heading>0</heading>
-                  <tilt>60</tilt>
+                  <tilt>30</tilt>
                   <range>40000</range>
                   <gx:fovy>60</gx:fovy>
                   <altitude>3341.7995674</altitude>
@@ -610,7 +610,7 @@ $content
                   <longitude>$lon</longitude>
                   <latitude>$lat</latitude>
                   <heading>${i.toDouble()}</heading>
-                  <tilt>60</tilt>
+                  <tilt>30</tilt>
                   <range>40000</range>
                   <gx:fovy>60</gx:fovy>
                   <altitude>3341.7995674</altitude>
@@ -636,7 +636,7 @@ $content
     required double latitude,
     required double longitude,
     double range = 5000,
-    double tilt = 60,
+    double tilt = 30,
     double orbitDuration = 20.0,
   }) {
     final StringBuffer playlist = StringBuffer();
@@ -695,7 +695,7 @@ $content
             <longitude>${site.longitude}</longitude>
             <latitude>${site.latitude}</latitude>
             <range>5000</range>
-            <tilt>60</tilt>
+            <tilt>30</tilt>
             <heading>0</heading>
             <altitudeMode>relativeToGround</altitudeMode>
           </LookAt>
@@ -712,7 +712,7 @@ $content
             <longitude>${site.longitude}</longitude>
             <latitude>${site.latitude}</latitude>
             <range>5000</range>
-            <tilt>60</tilt>
+            <tilt>30</tilt>
             <heading>$heading</heading>
             <altitudeMode>relativeToGround</altitudeMode>
           </LookAt>
@@ -1180,8 +1180,10 @@ $content
       (extent.maxLongitude - extent.minLongitude) / 2,
       0.005,
     );
-    final expandedLatitudeRadius = latitudeRadius * 1.02;
-    final expandedLongitudeRadius = longitudeRadius * 1.02;
+    // Cap the radius to ~0.25° (~28 km) so that very large sites don't produce
+    // an enormous circle that dwarfs the viewport and makes tilt/zoom unusable.
+    final expandedLatitudeRadius = math.min(latitudeRadius * 1.02, 0.25);
+    final expandedLongitudeRadius = math.min(longitudeRadius * 1.02, 0.25);
 
     final ring = <List<double>>[];
     for (var index = 0; index < _denseCirclePointCount; index++) {

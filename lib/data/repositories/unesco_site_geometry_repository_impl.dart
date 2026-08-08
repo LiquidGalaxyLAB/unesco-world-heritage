@@ -29,7 +29,7 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
       <int, HeritageSiteGeometry>{};
   static const double _wdpaMatchThreshold = 0.75;
   static const int _fallbackRingPointCount = 72;
-  static const double _fallbackEllipsePadding = 1.55;
+  static const double _fallbackEllipsePadding = 1.25;
   static const double _minimumLongitudeScale = 0.2;
 
   @override
@@ -457,13 +457,13 @@ class UnescoSiteGeometryRepositoryImpl implements UnescoSiteGeometryRepository {
     final normalizedCategory = rawCategory.trim().toLowerCase();
     switch (normalizedCategory) {
       case 'natural':
-        return 2200;
+        return 1600;
       case 'mixed':
-        return 1800;
+        return 1400;
       case 'cultural':
-        return 1200;
+        return 900;
       default:
-        return 1500;
+        return 450;
     }
   }
 }

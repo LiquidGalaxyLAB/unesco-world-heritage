@@ -189,6 +189,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
       function initMap() {
         var location = {lat: ${widget.site.latitude}, lng: ${widget.site.longitude}};
+        // The initial map positioning and later fitBounds calls are app-driven.
+        // Do not let them overwrite the LG site's intentional 30 degree tilt.
+        window.suppressNextCameraSync = true;
         window.siteMap = new google.maps.Map(document.getElementById('map'), {
           zoom: 7,
           center: location,
@@ -203,6 +206,10 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
         // Listen for camera changes and send to Flutter via MapSync channel.
         window.siteMap.addListener('idle', function() {
+          if (window.suppressNextCameraSync) {
+            window.suppressNextCameraSync = false;
+            return;
+          }
           if (window.MapSync) {
             var center = window.siteMap.getCenter();
             var zoom = window.siteMap.getZoom();
@@ -246,6 +253,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
               }
             }
             if (!bounds.isEmpty()) {
+              window.suppressNextCameraSync = true;
               window.siteMap.fitBounds(bounds, 40);
             }
           } catch(e) {
@@ -290,7 +298,13 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       }
 
       // Convert rings to coordinate arrays: [[lat, lng], ...] per ring.
-      final ringsData = geometry.boundary.rings
+      final rings = geometry.boundary.rings.length > 1
+          ? <List<HeritageGeoPoint>>[
+              _findLargestRing(geometry.boundary) ??
+                  geometry.boundary.rings.first,
+            ]
+          : geometry.boundary.rings;
+      final ringsData = rings
           .map(
             (ring) => ring
                 .map((point) => <double>[point.latitude, point.longitude])
@@ -538,6 +552,11 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
       _isRenderingOnLg = true;
     });
 
+    // Map sync sends the phone map's 2-D tilt (normally 0 degrees). Pause it
+    // until the LG scene's final 30 degree fly-to has completed.
+    final shouldResumeMapSync = _mapSyncService?.isSyncing ?? false;
+    _mapSyncService?.stopSync();
+
     try {
       // Clear the previous site and its balloon before awaiting geometry and
       // climate data for the next one.
@@ -558,6 +577,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
             orbitFileName: 'site_${widget.site.propertyId}_orbit.kml',
             orbitKml: payload.orbitKml,
             tilt: payload.cameraProfile.tilt,
+            altitude: payload.cameraProfile.altitude,
             startOrbitAfterRender: false,
             clearExistingKml: false,
           );
@@ -580,6 +600,9 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     } catch (error) {
       _showSnackBar(error.toString());
     } finally {
+      if (shouldResumeMapSync && widget.settingsViewModel.state.isConnected) {
+        _mapSyncService?.startSync();
+      }
       if (mounted) {
         setState(() {
           _isRenderingOnLg = false;
@@ -635,6 +658,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         longitude: payload.cameraProfile.center.longitude,
         range: payload.cameraProfile.flyToRange,
         tilt: payload.cameraProfile.tilt,
+        altitude: payload.cameraProfile.altitude,
       );
       // Allow the camera animation to settle before starting the tour.
       await Future<void>.delayed(const Duration(seconds: 3));
@@ -807,52 +831,154 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     );
   }
 
-  /// Returns the bounding box of the single largest outer polygon ring in
-  /// [geometry], identified by the shoelace signed-area formula (same method
-  /// used by [_RingDescriptor] in the KML builder). For multi-component sites
-  /// this focuses the flyTo camera on the biggest cluster instead of the
-  /// full scattered extent of every tiny satellite polygon.
-  _GeometryBounds _findLargestComponentBounds(
-    HeritagePolygonGeometry geometry,
-  ) {
-    if (geometry.rings.isEmpty) return const _GeometryBounds.empty();
-
-    List<HeritageGeoPoint>? largestRing;
-    double largestArea = 0;
-
-    for (final ring in geometry.rings) {
-      if (ring.length < 4) continue;
-      // Shoelace formula: area of the ring in degree-squared units.
-      var signedArea = 0.0;
-      for (var i = 0; i < ring.length - 1; i++) {
-        signedArea +=
-            (ring[i].longitude * ring[i + 1].latitude) -
-            (ring[i + 1].longitude * ring[i].latitude);
-      }
-      final area = signedArea.abs() / 2;
-      if (area > largestArea) {
-        largestArea = area;
-        largestRing = ring;
-      }
-    }
-
-    if (largestRing == null || largestRing.length < 4) {
-      return const _GeometryBounds.empty();
-    }
+  /// Returns the bounding box of the **densest cluster** of rings in
+  /// [geometry] for multi-component (>1 ring) sites.
+  ///
+  /// Strategy:
+  /// 1. Compute the centroid (mean lat/lng) of all ring centroids.
+  /// 2. For each ring centroid compute its distance to the overall centroid.
+  /// 3. Compute the median distance; keep only rings whose centroid is within
+  ///    2× the median distance — this discards outlier satellite polygons.
+  /// 4. Return the combined bounding box of those clustered rings so the
+  ///    camera zooms in on where most KMLs actually are.
+  ///
+  /// Falls back to the overall geometry bounds if clustering produces no
+  /// valid result (e.g. all rings are equidistant from the centroid).
+  /// Returns the bounding box of the **single largest ring** in [geometry].
+  ///
+  /// "Largest" is defined by the area of the ring's own bounding box
+  /// (latSpan × lngSpan in degree²), which is a fast proxy for ring size
+  /// without needing a full polygon-area calculation.
+  ///
+  /// Falls back to the full geometry bounds when no ring has ≥4 points.
+  _GeometryBounds _findLargestRingBounds(HeritagePolygonGeometry geometry) {
+    final largest = _findLargestRing(geometry);
+    if (largest == null) return _calculateGeometryBounds(geometry);
 
     var minLat = double.infinity;
     var maxLat = double.negativeInfinity;
     var minLng = double.infinity;
     var maxLng = double.negativeInfinity;
-    for (final point in largestRing) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLng) minLng = point.longitude;
-      if (point.longitude > maxLng) maxLng = point.longitude;
+    for (final p in largest) {
+      minLat = math.min(minLat, p.latitude);
+      maxLat = math.max(maxLat, p.latitude);
+      minLng = math.min(minLng, p.longitude);
+      maxLng = math.max(maxLng, p.longitude);
+    }
+    return _GeometryBounds(
+      minLatitude: minLat,
+      maxLatitude: maxLat,
+      minLongitude: minLng,
+      maxLongitude: maxLng,
+    );
+  }
+
+  List<HeritageGeoPoint>? _findLargestRing(HeritagePolygonGeometry geometry) {
+    List<HeritageGeoPoint>? largest;
+    double largestArea = -1;
+
+    for (final ring in geometry.rings) {
+      if (ring.length < 4) continue;
+      var minLat = double.infinity;
+      var maxLat = double.negativeInfinity;
+      var minLng = double.infinity;
+      var maxLng = double.negativeInfinity;
+      for (final p in ring) {
+        if (p.latitude < minLat) minLat = p.latitude;
+        if (p.latitude > maxLat) maxLat = p.latitude;
+        if (p.longitude < minLng) minLng = p.longitude;
+        if (p.longitude > maxLng) maxLng = p.longitude;
+      }
+      if (!minLat.isFinite || !minLng.isFinite) continue;
+      final area = (maxLat - minLat) * (maxLng - minLng);
+      if (area > largestArea) {
+        largestArea = area;
+        largest = ring;
+      }
     }
 
-    if (!minLat.isFinite || !minLng.isFinite) {
-      return const _GeometryBounds.empty();
+    return largest;
+  }
+
+  _GeometryBounds _findClusterBounds(HeritagePolygonGeometry geometry) {
+    if (geometry.rings.isEmpty) return const _GeometryBounds.empty();
+
+    // --- Step 1: compute per-ring centroids ---
+    // Store (centroid, ring) pairs so the ring reference is preserved even
+    // when rings with <4 points are skipped.
+    final centroidRingPairs =
+        <({_LatLngCenter centroid, List<HeritageGeoPoint> ring})>[];
+    for (final ring in geometry.rings) {
+      if (ring.length < 4) continue;
+      var minLat = double.infinity;
+      var maxLat = double.negativeInfinity;
+      var minLng = double.infinity;
+      var maxLng = double.negativeInfinity;
+      for (final p in ring) {
+        if (p.latitude < minLat) minLat = p.latitude;
+        if (p.latitude > maxLat) maxLat = p.latitude;
+        if (p.longitude < minLng) minLng = p.longitude;
+        if (p.longitude > maxLng) maxLng = p.longitude;
+      }
+      if (minLat.isFinite && minLng.isFinite) {
+        centroidRingPairs.add((
+          centroid: _LatLngCenter((minLat + maxLat) / 2, (minLng + maxLng) / 2),
+          ring: ring,
+        ));
+      }
+    }
+
+    if (centroidRingPairs.isEmpty) return const _GeometryBounds.empty();
+
+    // --- Step 2: overall centroid ---
+    final overallLat =
+        centroidRingPairs
+            .map((e) => e.centroid.latitude)
+            .reduce((a, b) => a + b) /
+        centroidRingPairs.length;
+    final overallLng =
+        centroidRingPairs
+            .map((e) => e.centroid.longitude)
+            .reduce((a, b) => a + b) /
+        centroidRingPairs.length;
+
+    // --- Step 3: distances from overall centroid (in degree-units) ---
+    final distances = centroidRingPairs
+        .map((e) {
+          final dLat = e.centroid.latitude - overallLat;
+          final dLng = e.centroid.longitude - overallLng;
+          return math.sqrt(dLat * dLat + dLng * dLng);
+        })
+        .toList(growable: false);
+
+    final sortedDistances = distances.toList()..sort();
+    final median = sortedDistances[sortedDistances.length ~/ 2];
+    // Threshold: include rings within 2× median distance; minimum 0.01°
+    // so tightly-packed sites (median ≈ 0) don't degenerate.
+    final threshold = math.max(median * 2.0, 0.01);
+
+    // --- Step 4: build bounds from all points of clustered rings ---
+    var minLat = double.infinity;
+    var maxLat = double.negativeInfinity;
+    var minLng = double.infinity;
+    var maxLng = double.negativeInfinity;
+    var clusteredCount = 0;
+
+    for (var i = 0; i < centroidRingPairs.length; i++) {
+      if (distances[i] > threshold) continue;
+      // Expand bounds using all actual ring points for accurate coverage.
+      for (final p in centroidRingPairs[i].ring) {
+        if (p.latitude < minLat) minLat = p.latitude;
+        if (p.latitude > maxLat) maxLat = p.latitude;
+        if (p.longitude < minLng) minLng = p.longitude;
+        if (p.longitude > maxLng) maxLng = p.longitude;
+      }
+      clusteredCount++;
+    }
+
+    if (clusteredCount == 0 || !minLat.isFinite || !minLng.isFinite) {
+      // Fallback: use overall geometry bounds.
+      return _calculateGeometryBounds(geometry);
     }
 
     return _GeometryBounds(
@@ -873,12 +999,13 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
 
     final hasBoundary = geometry != null && !geometry.boundary.isEmpty;
     final isCircularFallback = geometry?.boundary.isFallbackCircle ?? false;
-    // For multi-component sites (more than one ring) focus the camera on the
-    // largest polygon component rather than the full scattered extent.
-    // Single-component sites use the existing full-bounds path unchanged.
+    // For multi-component sites (more than one ring) zoom the camera in on
+    // the single largest KML polygon (by bounding-box area) so the view
+    // centres on the primary feature rather than the full scattered extent.
+    // Single-component sites use the full-bounds path unchanged.
     final bounds = hasBoundary
         ? (geometry!.boundary.rings.length > 1
-              ? _findLargestComponentBounds(geometry.boundary)
+              ? _findLargestRingBounds(geometry.boundary)
               : _calculateGeometryBounds(geometry.boundary))
         : const _GeometryBounds.empty();
     final center = bounds.isValid
@@ -888,23 +1015,41 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
         ? _calculateAdaptiveOrbitRange(bounds, center.latitude)
         : _fallbackOrbitRange(site.category);
 
-    // Keep the initial fly-to close enough that the extruded boundary reads as
-    // vertical walls instead of a flat footprint. Larger rigs already render
-    // taller walls, so both rig sizes can use a tighter low-end range.
-    final double flyToMin = isLargeRig ? 1100 : 1300;
+    // Both 3-screen and 5-screen rigs use 30° tilt so the camera lands at
+    // a very low, near-ground-level angle — giving a truly 3D perspective
+    // where extruded KML walls appear as tall structures consistently
+    // across all rig sizes.
+    const double tilt = 30.0;
+
+    // With a 30° tilt the camera footprint on the ground is narrower so a
+    // slightly larger multiplier works well. 0.55 for large rigs and 0.60
+    // for 3-screen rigs keeps the site filling the central screens.
+    // The minimum flyTo range is 1800 m so the camera never clips into terrain.
+    final double flyToFactor = isLargeRig ? 0.55 : 0.60;
+    const double flyToMin = 1800;
+    // For circular fallback sites (single-point / missing boundary) dive the
+    // camera in very close so the extruded circle walls appear large and the
+    // view feels near-ground-level.  Non-fallback sites keep the standard
+    // 1 800 m minimum so no terrain clipping occurs.
     final flyToRange = isCircularFallback
         ? _clampRange(
-            orbitRange * 0.55,
-            min: isLargeRig ? 1100 : 1400,
-            max: 8000,
+            orbitRange * (isLargeRig ? 0.40 : 0.45),
+            min: 400,
+            max: 2500,
           )
-        : _clampRange(orbitRange * 0.65, min: flyToMin, max: 12000);
+        : _clampRange(orbitRange * flyToFactor, min: flyToMin, max: 12000);
+
+    // Circular fallback sites use a look-at altitude of 50 m so the camera
+    // arrives just above the surface after the fly-to animation ends.
+    // Real-boundary sites keep the default 150 m look-at altitude.
+    final double cameraAltitude = isCircularFallback ? 50.0 : 150.0;
 
     return _SiteCameraProfile(
       center: center,
       flyToRange: flyToRange,
       orbitRange: orbitRange,
-      tilt: 76,
+      tilt: tilt,
+      altitude: cameraAltitude,
     );
   }
 
@@ -957,9 +1102,15 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     if (geometry != null && !geometry.boundary.isEmpty) {
       final int screens = widget.settingsViewModel.state.settings?.screens ?? 3;
       final bool isLargeRig = screens > 3;
+      final rings = geometry.boundary.rings.length > 1
+          ? <List<HeritageGeoPoint>>[
+              _findLargestRing(geometry.boundary) ??
+                  geometry.boundary.rings.first,
+            ]
+          : geometry.boundary.rings;
       return KMLBuilder.buildBoundaryKml(
         name: site.name,
-        rings: geometry.boundary.rings
+        rings: rings
             .map(
               (ring) => ring
                   .map((point) => <double>[point.latitude, point.longitude])
@@ -1621,12 +1772,17 @@ class _SiteCameraProfile {
     required this.flyToRange,
     required this.orbitRange,
     required this.tilt,
+    required this.altitude,
   });
 
   final _LatLngCenter center;
   final double flyToRange;
   final double orbitRange;
   final double tilt;
+
+  /// Look-at altitude (metres above ground). 50 m for circular-fallback sites
+  /// to land the camera near ground level; 150 m for real-boundary sites.
+  final double altitude;
 }
 
 class _LgRenderPayload {
