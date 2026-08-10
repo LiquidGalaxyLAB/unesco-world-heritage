@@ -202,7 +202,7 @@ $content
     final double extrusionHeight = isCircularFallback
         ? (isLargeRig ? 120.0 : 120.0)
         : simplifyForLg
-        ? (isLargeRig ? 150.0 : 150.0)
+        ? (isLargeRig ? 130.0 : 130.0)
         : 500.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings
