@@ -1019,7 +1019,7 @@ class _HeritageSiteDetailViewState extends State<HeritageSiteDetailView> {
     // a very low, near-ground-level angle — giving a truly 3D perspective
     // where extruded KML walls appear as tall structures consistently
     // across all rig sizes.
-    const double tilt = 30.0;
+    const double tilt = 60.0;
 
     // With a 30° tilt the camera footprint on the ground is narrower so a
     // slightly larger multiplier works well. 0.55 for large rigs and 0.60

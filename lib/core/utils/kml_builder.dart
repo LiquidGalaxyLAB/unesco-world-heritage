@@ -186,7 +186,7 @@ $content
   ///  - dropping inner hole rings (barely visible at LG viewing distances)
   ///  - omitting the trajectory LineString
   ///  - capping rendered components at 30 (vs. 120 for the in-app map)
-  ///  - reducing extrusion height to 100 m (vs. 150 m) for lower GPU load
+  ///  - reducing normal site extrusion height for lower GPU load
   static String buildBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,
@@ -196,15 +196,13 @@ $content
     bool isCircularFallback = false,
   }) {
     // 3D extrusion height depends on both the render mode and rig size:
-    //  • simplifyForLg + isLargeRig (>3 screens) → 450 m: tall enough to read
-    //    as a solid 3D shape across a wide panoramic display.
-    //  • simplifyForLg + 3 screens              → 350 m: taller walls so they
-    //    read as 3D from a 30° tilt ground-level camera.
+    //  • simplifyForLg + isLargeRig (>3 screens) → 200 m
+    //  • simplifyForLg + 3 screens              → 150 m
     //  • full detail (!simplifyForLg)            → 500 m for any rig size.
     final double extrusionHeight = isCircularFallback
-        ? (isLargeRig ? 450.0 : 380.0)
+        ? (isLargeRig ? 120.0 : 120.0)
         : simplifyForLg
-        ? (isLargeRig ? 450.0 : 350.0)
+        ? (isLargeRig ? 150.0 : 150.0)
         : 500.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings

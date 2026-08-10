@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../settings/view_models/settings_view_model.dart';
+import '../../settings/views/help_view.dart';
 import '../../settings/views/widgets/lg_connection_header.dart';
 
 class AboutView extends StatelessWidget {
@@ -22,13 +23,36 @@ class AboutView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-              child: Text(
-                'About',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: AppColors.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
+              padding: const EdgeInsets.fromLTRB(24, 10, 12, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'About',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            color: AppColors.onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                  Tooltip(
+                    message: 'Help',
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.help_outline_rounded,
+                        color: AppColors.onSurface,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const HelpView(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
