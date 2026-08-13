@@ -1,76 +1,211 @@
 # UNESCO World Heritage for Liquid Galaxy
 
-## Table of Contents
-1. [Overview](#overview)
-2. [Key Features](#key-features)
-3. [Technologies Used](#technologies-used)
-4. [Prerequisites](#prerequisites)
-5. [Installation](#installation)
-6. [Usage](#usage)
+[![Flutter](https://img.shields.io/badge/Flutter-3.10.4+-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.10.4+-0175C2?logo=dart&logoColor=white)](https://dart.dev)
+[![Android](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+[![Liquid Galaxy](https://img.shields.io/badge/Liquid%20Galaxy-LAB-4285F4)](https://www.liquidgalaxy.eu)
+[![GSoC](https://img.shields.io/badge/GSoC-2026-FBBC04?logo=google&logoColor=black)](https://summerofcode.withgoogle.com)
+[![License](https://img.shields.io/badge/License-Project%20Repository-lightgrey)](#license)
 
-## Overview
-UNESCO World Heritage for Liquid Galaxy is a Flutter-based Android application designed to work with the Liquid Galaxy rig, as part of Google Summer of Code. It provides an immersive, interactive, and educational experience to explore UNESCO World Heritage sites globally using the multi-screen Liquid Galaxy visualization system. 
-Users can discover cultural and natural wonders through guided tours, dynamic AI interactions, and 3D visual representations.
+A Flutter Android application for exploring UNESCO World Heritage Sites on a
+Liquid Galaxy rig.
 
-## Key Features
-- **Liquid Galaxy Integration**: Seamless connection with Liquid Galaxy rigs via SSH for a synchronized, immersive multi-screen view of world heritage sites.
-- **Interactive Tour Guide**: Utilizes AI and Text-to-Speech to provide dynamic and informative voice-guided tours of different heritage sites.
-- **Voice Commands**: Integrated Speech-to-Text allows users to control the application and navigate the map hands-free.
-- **AI-Powered Insights**: Generative AI integration to answer questions, summarize site history, and enhance the educational aspect of the exploration.
-- **3D KML Generation**: Dynamically creates and sends KML files to render rich 3D tours, points of interest, and geometry on the Liquid Galaxy screens.
-- **Comprehensive Database**: Detailed information on numerous UNESCO World Heritage sites around the world.
+The app lets users discover cultural, natural, and mixed heritage sites, view
+site details, ask Gemini questions, listen to generated stories, and send
+Google Earth KML scenes to a multi-screen Liquid Galaxy installation.
 
-## Technologies Used
-- **Framework**: Flutter (Dart) - Natively compiled application framework by Google.
-- **State Management & Architecture**: Riverpod (`flutter_riverpod`)
-- **AI Integration**: Google Generative AI (`google_generative_ai`)
-- **Voice Services**: Speech-to-Text (`speech_to_text`), Text-to-Speech (`flutter_tts`)
-- **LG Connection**: SSH client (`dartssh2`)
-- **Networking**: `http`, `cached_network_image`
-- **UI & Animations**: `shimmer_animation`, `animated_text_kit`, Material Design
+This project was built as part of Google Summer of Code 2026 with the Liquid
+Galaxy organization.
 
-## Prerequisites
-- Android device or emulator 
-- Flutter SDK (^3.10.4)
-- Liquid Galaxy rig (or virtual machine setup)
-- Google Generative AI API Key
+## Demo
 
-## Installation
+The app connects a mobile controller to a Liquid Galaxy rig and renders UNESCO
+site boundaries, orbit tours, splash screens, and information panels across the
+screens.
 
-### Building from Source
+| Mobile controller and LG scene | Extruded KML boundary | Multi-screen LG output |
+| --- | --- | --- |
+| ![Mobile controller connected to Liquid Galaxy](demo/demo1.png) | ![UNESCO site KML boundary rendered on Liquid Galaxy](demo/demo2.png) | ![Liquid Galaxy multi-screen UNESCO world heritage demo](demo/demo3.png) |
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/LiquidGalaxyLAB/unesco-world-heritage.git
-   cd unesco-world-heritage
-   ```
+## What It Does
 
-2. **Install dependencies:**
-   ```bash
-   flutter pub get
-   ```
+- Explore UNESCO World Heritage Sites from a mobile interface.
+- Search and filter sites by name, country, region, category, inscription year,
+  and danger status.
+- Connect to a Liquid Galaxy rig over SSH.
+- Send site KML, boundary overlays, info balloons, logos, and orbit tours to LG.
+- Fly Google Earth to selected sites and synchronize the in-app map camera with
+  the rig.
+- Ask Gemini questions about a selected site.
+- Generate and play short narrated site stories.
+- Show current weather and best-time-to-visit information where available.
+- Control common LG actions such as relaunch, reboot, clean KML, clean logo, and
+  power off.
 
-3. **Check your environment:**
-   Ensure your Flutter environment is correctly set up.
-   ```bash
-   flutter doctor
-   ```
+## Screens And Flow
 
-4. **Run the application:**
-   Connect your Android device or start an emulator, then run:
-   ```bash
-   flutter run
-   ```
+- **Home**: shows nearby or featured heritage sites.
+- **Search**: full site search with filters.
+- **Site Details**: map preview, boundary rendering, LG fly-to, orbit, climate,
+  story playback, and Gemini chat.
+- **API Authentication**: stores Gemini and Google Maps API keys locally.
+- **Settings**: stores LG SSH configuration and exposes rig commands.
+- **About**: project information, credits, data sources, and help.
 
-5. **Build the APK:**
-   To build a release APK for installation on your device:
-   ```bash
-   flutter build apk
-   ```
-   The APK file will be located in `/build/app/outputs/flutter-apk/app-release.apk`.
+## Tech Stack
 
-## Usage
-1. **Initial Setup:** Launch the app on your Android device.
-2. **Connect to Liquid Galaxy:** Navigate to the settings and enter the Liquid Galaxy Master node's IP address, port, username, and password to establish an SSH connection.
-3. **Explore Sites:** Browse the list of UNESCO World Heritage sites.
-4. **Interactive Tours:** Select a site to send it to the Liquid Galaxy rig and listen to AI-generated insights via the Voice Guide.
+- **Flutter / Dart** for the Android app.
+- **Riverpod** for state management.
+- **dartssh2** for SSH communication with Liquid Galaxy.
+- **Google Maps WebView** for map previews.
+- **Google Generative AI / Gemini** for chat and story generation.
+- **Speech-to-text and PCM audio playback** for voice interaction and narration.
+- **Hive and SharedPreferences** for local app storage.
+- **UNESCO, ArcGIS, Open-Meteo, and bundled JSON assets** for site, geometry, and
+  climate-related data.
+
+## Requirements
+
+- Flutter SDK with Dart `^3.10.4`.
+- Android device or Android emulator.
+- Internet connection for maps, images, APIs, and live data.
+- Liquid Galaxy rig or compatible LG VM setup.
+- Gemini API key for AI features.
+- Google Maps API key for map previews.
+
+Check your local Flutter setup:
+
+```bash
+flutter doctor
+```
+
+## Setup
+
+Clone the repository:
+
+```bash
+git clone https://github.com/LiquidGalaxyLAB/unesco-world-heritage.git
+cd unesco-world-heritage
+```
+
+Install dependencies:
+
+```bash
+flutter pub get
+```
+
+Create a `.env` file if needed and add your Google Maps key:
+
+```env
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+```
+
+You can also save the Google Maps API key and Gemini API key from the app's
+**API Authentication** screen.
+
+Run the app:
+
+```bash
+flutter run
+```
+
+## Liquid Galaxy Setup
+
+Open **Settings** in the app and enter:
+
+- Master node IP address
+- SSH port, usually `22`
+- LG username, usually `lg`
+- LG password
+- Number of screens in the rig
+
+After connecting, the app can send KML files, start orbit tours, show site
+balloons, clear KML, relaunch LG, reboot LG, and power off the rig.
+
+## Build APK
+
+Debug APK:
+
+```bash
+flutter build apk --debug
+```
+
+Release APK:
+
+```bash
+flutter build apk --release
+```
+
+The release APK is generated at:
+
+```text
+build/app/outputs/flutter-apk/app-release.apk
+```
+
+If Kotlin cache errors appear on Windows because the project and Pub cache are
+on different drives, keep the Pub cache on the same drive as the project before
+building:
+
+```powershell
+$env:PUB_CACHE = "D:\PubCache"
+flutter clean
+flutter pub get
+flutter build apk --release
+```
+
+## Project Structure
+
+```text
+lib/
+  core/                 Theme, constants, providers, KML helpers
+  data/                 Services and repository implementations
+  domain/               Models and repository contracts
+  ui/features/          App screens, widgets, and view models
+
+assets/
+  images/               App images and project logos
+  font/                 GoogleSans font files
+  whc_site_bestTimeVisit.json
+```
+
+## Data And APIs
+
+This app uses public and third-party services to enrich the heritage site
+experience:
+
+- UNESCO World Heritage data
+- ArcGIS geometry data
+- Open-Meteo weather data
+- Google Maps
+- Google Gemini
+
+API availability, quotas, and keys are controlled by their respective providers.
+
+## Credits
+
+Created and maintained by **Saumya Bhattacharya** as a Google Summer of Code
+2026 project with **Liquid Galaxy**.
+
+Mentors:
+
+- Yash Raj Bharti
+- Rohit Kumar
+
+Organization admin:
+
+- Andreu Ibanez
+
+Thanks to the Liquid Galaxy community for guidance, testing, and support.
+
+## Repository
+
+GitHub:
+
+```text
+https://github.com/LiquidGalaxyLAB/unesco-world-heritage
+```
+
+## License
+
+Please refer to the repository license or organization policy for usage and
+distribution terms.
