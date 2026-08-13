@@ -186,7 +186,7 @@ $content
   ///  - dropping inner hole rings (barely visible at LG viewing distances)
   ///  - omitting the trajectory LineString
   ///  - capping rendered components at 30 (vs. 120 for the in-app map)
-  ///  - reducing extrusion height to 100 m (vs. 150 m) for lower GPU load
+  ///  - reducing normal site extrusion height for lower GPU load
   static String buildBoundaryKml({
     required String name,
     required List<List<List<double>>> rings,
@@ -196,16 +196,14 @@ $content
     bool isCircularFallback = false,
   }) {
     // 3D extrusion height depends on both the render mode and rig size:
-    //  • simplifyForLg + isLargeRig (>3 screens) → 280 m: tall enough to read
-    //    as a solid 3D shape across a wide panoramic display.
-    //  • simplifyForLg + 3 screens              → 120 m: shorter walls that
-    //    suit the narrower single-screen viewport without GPU over-load.
-    //  • full detail (!simplifyForLg)            → 300 m for any rig size.
+    //  • simplifyForLg + isLargeRig (>3 screens) → 200 m
+    //  • simplifyForLg + 3 screens              → 150 m
+    //  • full detail (!simplifyForLg)            → 500 m for any rig size.
     final double extrusionHeight = isCircularFallback
-        ? (isLargeRig ? 420.0 : 320.0)
+        ? (isLargeRig ? 120.0 : 120.0)
         : simplifyForLg
-        ? (isLargeRig ? 280.0 : 120.0)
-        : 300.0;
+        ? (isLargeRig ? 130.0 : 130.0)
+        : 500.0;
     final safeName = _escapeXml(name);
     final normalizedRings = rings
         .map(_normalizeRing)
@@ -278,36 +276,43 @@ $content
         altitude: extrusionHeight,
       );
 
-      // Inner holes: omitted when simplifyForLg is true.
-      final innerBoundaries = simplifyForLg
-          ? ''
-          : component.innerRings
-                .map(
-                  (ring) =>
-                      '<innerBoundaryIs><LinearRing><coordinates>${_buildLinearRing(ring, altitude: extrusionHeight)}</coordinates></LinearRing></innerBoundaryIs>',
-                )
-                .join();
-
-      final geometryKml = isCircularFallback
-          ? '''
+      // Render extruded boundary walls only. Using LineString instead of
+      // Polygon removes the filled top/roof face while keeping the vertical
+      // boundary curtain, matching the circular fallback KML behavior.
+      final wallGeometries = <String>[
+        '''
       <LineString>
         <extrude>1</extrude>
         <tessellate>1</tessellate>
         <altitudeMode>relativeToGround</altitudeMode>
         <coordinates>$outerBoundary</coordinates>
-      </LineString>'''
-          : '''
-      <Polygon>
+      </LineString>''',
+      ];
+
+      if (!simplifyForLg && !isCircularFallback) {
+        wallGeometries.addAll(
+          component.innerRings.map((ring) {
+            final innerBoundary = _buildLinearRing(
+              ring,
+              altitude: extrusionHeight,
+            );
+            return '''
+      <LineString>
         <extrude>1</extrude>
         <tessellate>1</tessellate>
         <altitudeMode>relativeToGround</altitudeMode>
-        <outerBoundaryIs>
-          <LinearRing>
-            <coordinates>$outerBoundary</coordinates>
-          </LinearRing>
-        </outerBoundaryIs>
-        $innerBoundaries
-      </Polygon>''';
+        <coordinates>$innerBoundary</coordinates>
+      </LineString>''';
+          }),
+        );
+      }
+
+      final geometryKml = wallGeometries.length == 1
+          ? wallGeometries.first
+          : '''
+      <MultiGeometry>
+        ${wallGeometries.join()}
+      </MultiGeometry>''';
 
       placemarks.add('''
     <Placemark>
@@ -550,7 +555,7 @@ $content
                   <longitude>$lon</longitude>
                   <latitude>$lat</latitude>
                   <heading>${i.toDouble()}</heading>
-                  <tilt>60</tilt>
+                  <tilt>30</tilt>
                   <range>40000</range>
                   <gx:fovy>60</gx:fovy>
                   <altitude>3341.7995674</altitude>
@@ -584,7 +589,7 @@ $content
                   <longitude>$lon</longitude>
                   <latitude>$lat</latitude>
                   <heading>0</heading>
-                  <tilt>60</tilt>
+                  <tilt>30</tilt>
                   <range>40000</range>
                   <gx:fovy>60</gx:fovy>
                   <altitude>3341.7995674</altitude>
@@ -603,7 +608,7 @@ $content
                   <longitude>$lon</longitude>
                   <latitude>$lat</latitude>
                   <heading>${i.toDouble()}</heading>
-                  <tilt>60</tilt>
+                  <tilt>30</tilt>
                   <range>40000</range>
                   <gx:fovy>60</gx:fovy>
                   <altitude>3341.7995674</altitude>
@@ -629,7 +634,7 @@ $content
     required double latitude,
     required double longitude,
     double range = 5000,
-    double tilt = 60,
+    double tilt = 30,
     double orbitDuration = 20.0,
   }) {
     final StringBuffer playlist = StringBuffer();
@@ -688,7 +693,7 @@ $content
             <longitude>${site.longitude}</longitude>
             <latitude>${site.latitude}</latitude>
             <range>5000</range>
-            <tilt>60</tilt>
+            <tilt>30</tilt>
             <heading>0</heading>
             <altitudeMode>relativeToGround</altitudeMode>
           </LookAt>
@@ -705,7 +710,7 @@ $content
             <longitude>${site.longitude}</longitude>
             <latitude>${site.latitude}</latitude>
             <range>5000</range>
-            <tilt>60</tilt>
+            <tilt>30</tilt>
             <heading>$heading</heading>
             <altitudeMode>relativeToGround</altitudeMode>
           </LookAt>
@@ -1173,8 +1178,10 @@ $content
       (extent.maxLongitude - extent.minLongitude) / 2,
       0.005,
     );
-    final expandedLatitudeRadius = latitudeRadius * 1.02;
-    final expandedLongitudeRadius = longitudeRadius * 1.02;
+    // Cap the radius to ~0.25° (~28 km) so that very large sites don't produce
+    // an enormous circle that dwarfs the viewport and makes tilt/zoom unusable.
+    final expandedLatitudeRadius = math.min(latitudeRadius * 1.02, 0.25);
+    final expandedLongitudeRadius = math.min(longitudeRadius * 1.02, 0.25);
 
     final ring = <List<double>>[];
     for (var index = 0; index < _denseCirclePointCount; index++) {
