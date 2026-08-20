@@ -5,7 +5,7 @@
 [![Android](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Liquid Galaxy](https://img.shields.io/badge/Liquid%20Galaxy-LAB-4285F4)](https://www.liquidgalaxy.eu)
 [![GSoC](https://img.shields.io/badge/GSoC-2026-FBBC04?logo=google&logoColor=black)](https://summerofcode.withgoogle.com)
-[![License](https://img.shields.io/badge/License-Project%20Repository-lightgrey)](#license)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 A Flutter Android application for exploring UNESCO World Heritage Sites on a
 Liquid Galaxy rig.
@@ -207,5 +207,5 @@ https://github.com/LiquidGalaxyLAB/unesco-world-heritage
 
 ## License
 
-Please refer to the repository license or organization policy for usage and
-distribution terms.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for the
+complete license text and copyright notice.
